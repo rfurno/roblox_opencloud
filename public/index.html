@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Collector Open Cloud — local</title>
+    <link rel="stylesheet" href="/app.css" />
+  </head>
+  <body>
+    <header class="top">
+      <div>
+        <p class="eyebrow">Gachamon · local controller</p>
+        <h1>The Collector</h1>
+      </div>
+      <div class="clock-block">
+        <div id="clock" class="clock">—</div>
+        <p class="clock-sub">UTC · this machine is the scheduler</p>
+      </div>
+    </header>
+
+    <section class="flags" id="flags"></section>
+
+    <section class="grid" id="jobs"></section>
+
+    <section class="panel">
+      <div class="panel-head">
+        <h2>Ticks</h2>
+        <button id="tick-now" type="button">Tick now (dry-run)</button>
+      </div>
+      <p class="hint">
+        The npm process ticks every 30s. <strong>Tick now</strong> only dry-runs.
+        Sandbox <strong>Send notification now</strong> actually POSTs (bypass window; one MOMENT per user per UTC day).
+        Keep the laptop awake through a scheduled send window. Bind is 127.0.0.1.
+      </p>
+      <pre id="ticks" class="log"></pre>
+    </section>
+
+    <script src="/app.js"></script>
+  </body>
+</html>

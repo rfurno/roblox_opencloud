@@ -1,0 +1,26 @@
+{
+  "name": "roblox_opencloud",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Local Open Cloud controller for Gachamon Collector experience notifications",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "start": "tsx src/index.ts",
+    "tick": "tsx src/index.ts --once",
+    "test": "vitest run",
+    "test:tz": "TZ=UTC vitest run && TZ=America/Los_Angeles vitest run && TZ=Europe/Lisbon vitest run"
+  },
+  "dependencies": {
+    "luxon": "^3.7.2"
+  },
+  "devDependencies": {
+    "@types/luxon": "^3.7.1",
+    "@types/node": "^24.3.0",
+    "tsx": "^4.20.5",
+    "typescript": "^5.9.2",
+    "vitest": "^3.2.4"
+  }
+}

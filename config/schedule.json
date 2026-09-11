@@ -1,0 +1,21 @@
+{
+  "scheduleTimeZone": "Etc/UTC",
+  "jitterSeconds": 600,
+  "pushLeadSeconds": 480,
+  "sendWindowSeconds": 60,
+  "tickIntervalSeconds": 30,
+  "sandbox": {
+    "universeId": "7034342160",
+    "placeId": "117194948580255",
+    "hoursLocal": [4, 10, 16, 22],
+    "notifyHoursLocal": [4, 10, 16, 22],
+    "allowlistPath": "config/allowlist.sandbox.json"
+  },
+  "live": {
+    "universeId": "6674250544",
+    "placeId": "98219898516303",
+    "hoursLocal": [16, 4],
+    "notifyHoursLocal": [16],
+    "allowlistPath": "config/allowlist.live.json"
+  }
+}
