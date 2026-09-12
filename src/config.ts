@@ -30,6 +30,7 @@ export type AppConfig = {
   openBrowser: boolean;
   logUserResults: boolean;
   apiKey: Record<UniverseName, string>;
+  snapshotApiKey: Record<UniverseName, string>;
   messageId: Record<UniverseName, string>;
 };
 
@@ -92,6 +93,10 @@ export function loadConfig(): AppConfig {
     apiKey: {
       sandbox: process.env.ROBLOX_API_KEY_SANDBOX || "",
       live: process.env.ROBLOX_API_KEY_LIVE || "",
+    },
+    snapshotApiKey: {
+      sandbox: process.env.ROBLOX_API_KEY_SANDBOX_SNAPSHOT || "",
+      live: process.env.ROBLOX_API_KEY_LIVE_SNAPSHOT || "",
     },
     messageId: {
       sandbox: process.env.MESSAGE_ID_SANDBOX || "",

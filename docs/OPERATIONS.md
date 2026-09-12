@@ -37,7 +37,9 @@ Live and Sandbox **share the 16:00 UTC send window** (same `slotKey` → same ji
 | Name | Required | Notes |
 | --- | --- | --- |
 | `ROBLOX_API_KEY_SANDBOX` | for Sandbox HTTP | Universe-scoped user-notifications key |
-| `ROBLOX_API_KEY_LIVE` | for Live HTTP | Separate key |
+| `ROBLOX_API_KEY_LIVE` | for Live HTTP | Separate notifications key |
+| `ROBLOX_API_KEY_LIVE_SNAPSHOT` | for daily Live DataStore snapshot | `universe-datastores.control:snapshot` on Live `6674250544` only. **Not** the notifications key |
+| `ROBLOX_API_KEY_SANDBOX_SNAPSHOT` | no | Optional same scope on Sandbox `7034342160` |
 | `MESSAGE_ID_SANDBOX` | for Sandbox HTTP | Creator Dashboard notification string asset id |
 | `MESSAGE_ID_LIVE` | for Live HTTP | Separate string |
 | `LIVE_SENDS_ENABLED` | no | `false` unless explicitly enabling Live |
@@ -57,9 +59,44 @@ LIVE_SENDS_ENABLED=false
 DATA_DIR=./data
 ROBLOX_API_KEY_SANDBOX=rbx_placeholder_sandbox
 ROBLOX_API_KEY_LIVE=rbx_placeholder_live
+ROBLOX_API_KEY_LIVE_SNAPSHOT=rbx_placeholder_live_snapshot
+ROBLOX_API_KEY_SANDBOX_SNAPSHOT=
 MESSAGE_ID_SANDBOX=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
 MESSAGE_ID_LIVE=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
 ```
+
+---
+
+## DataStore snapshots (Live)
+
+Roblox keeps **hourly** versions of keys, but successive writes in the same UTC hour overwrite that hour’s backup. A **snapshot** pins every key in the universe so the next write creates a versioned backup regardless of the hour. Data current at snapshot time is kept ~**30 days**. This is a versioning pin, not a downloadable dump.
+
+**Create (daily) needs only** `universe-datastores.control:snapshot` on Live. That is enough. Do **not** put this key in `ROBLOX_API_KEY_LIVE` (that env is notifications).
+
+Not required for the daily create:
+
+| Item | Why |
+| --- | --- |
+| `universe-datastores.objects:read` / `versions:list` | Restore / inspect a key as of `latestSnapshotTime`. Add later if you want a rollback tool |
+| Sandbox snapshot key | Optional. Live is the player-data universe |
+| `DRY_RUN=false` / `LIVE_SENDS_ENABLED` | Snapshots are independent of MOMENT sends |
+| IP allowlist on the key | Same rule as notifications — do not lock to a laptop IP |
+
+**Routine:** `npm start` with `ROBLOX_API_KEY_LIVE_SNAPSHOT` set. After each 30s Collector tick, if this UTC day has no Live row in `./data/live.sqlite` (`snapshots` table), POST
+
+```
+POST https://apis.roblox.com/cloud/v2/universes/6674250544/data-stores:snapshot
+Header: x-api-key: $ROBLOX_API_KEY_LIVE_SNAPSHOT
+Body: {}
+```
+
+Expect `{ "newSnapshotTaken": true, "latestSnapshotTime": "…Z" }`. A second call the same UTC day is a no-op (`newSnapshotTaken: false`) and we skip HTTP once the ledger has the day. 429/5xx: leave unrecorded, next tick retries. Scheduled POST waits if a Collector notify window is open (do not steal the 60s MOMENT window).
+
+Also take a snapshot **manually** from the dashboard **Snapshots** tab (or the same POST) before publishing a TCG update that changes data-store schema.
+
+Dashboard: `http://127.0.0.1:3848` → **Snapshots**. History is this machine’s ledger; Roblox has no list-snapshots API.
+
+Restore (later, different key): `GetVersionAtTime` / Open Cloud `entries/{key}@latest:{latestSnapshotTime}`. Not implemented here.
 
 Do not commit real keys or real message ids. **Do not put `ROBLOX_API_KEY_*` in GitHub Actions secrets.** Dry-run does not need keys. Local curl and Fly secrets only.
 

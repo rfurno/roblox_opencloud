@@ -20,7 +20,7 @@ npm test
 npm start              # scheduler + http://127.0.0.1:3848
 ```
 
-Keep the machine awake (`caffeinate -i npm start` on macOS). The dashboard binds **127.0.0.1** only. The **Tick now** button is always dry-run (no HTTP, no ledger).
+Keep the machine awake (`caffeinate -i npm start` on macOS). The dashboard binds **127.0.0.1** only. The **Tick now** button is always dry-run (no HTTP, no ledger). The **Snapshots** tab shows Live DataStore snapshot history (one per UTC day; needs `ROBLOX_API_KEY_LIVE_SNAPSHOT`).
 
 One-shot (no browser):
 

@@ -265,10 +265,11 @@ v1: **one process**, two isolated jobs per tick (sandbox then live). **Confirmed
 ```
 src/
   clock.ts          hash32, jitterFor, clockSlotsNear, inSendWindow
-  roblox.ts         MOMENT client
-  store.ts          node:sqlite ledger
+  roblox.ts         MOMENT + DataStore snapshot client
+  store.ts          node:sqlite ledger (sends, moment_days, snapshots)
   audience.ts       allowlist JSON
   worker.ts         one tick (INSERT OR IGNORE → SELECT → POST)
+  snapshot.ts       daily DataStore snapshot (1/UTC day, skip send window)
   config.ts         schedule.json + .env
   server.ts         127.0.0.1 dashboard + 30s scheduler
   index.ts          npm start | npm run tick --once

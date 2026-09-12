@@ -20,20 +20,47 @@
 
     <section class="flags" id="flags"></section>
 
-    <section class="grid" id="jobs"></section>
+    <nav class="tabs" role="tablist">
+      <button type="button" class="tab active" data-tab="collector" role="tab" aria-selected="true">
+        Collector
+      </button>
+      <button type="button" class="tab" data-tab="snapshots" role="tab" aria-selected="false">
+        Snapshots
+      </button>
+    </nav>
 
-    <section class="panel">
-      <div class="panel-head">
-        <h2>Ticks</h2>
-        <button id="tick-now" type="button">Tick now (dry-run)</button>
-      </div>
+    <div id="pane-collector" class="pane">
+      <section class="grid" id="jobs"></section>
+
+      <section class="panel">
+        <div class="panel-head">
+          <h2>Ticks</h2>
+          <button id="tick-now" type="button">Tick now (dry-run)</button>
+        </div>
+        <p class="hint">
+          The npm process ticks every 30s. <strong>Tick now</strong> only dry-runs.
+          Sandbox <strong>Send notification now</strong> actually POSTs (bypass window; one MOMENT per user per UTC day).
+          Keep the laptop awake through a scheduled send window. Bind is 127.0.0.1.
+        </p>
+        <pre id="ticks" class="log"></pre>
+      </section>
+    </div>
+
+    <div id="pane-snapshots" class="pane hidden">
       <p class="hint">
-        The npm process ticks every 30s. <strong>Tick now</strong> only dry-runs.
-        Sandbox <strong>Send notification now</strong> actually POSTs (bypass window; one MOMENT per user per UTC day).
-        Keep the laptop awake through a scheduled send window. Bind is 127.0.0.1.
+        Daily DataStore snapshot for Live. Roblox allows <strong>one snapshot per UTC day</strong> per experience.
+        It pins current keys as versioned backups for ~30 days — it is not a downloadable dump.
+        Independent of <code>DRY_RUN</code> / MOMENT sends. Skips the Collector 60s send window, then retries next tick.
       </p>
-      <pre id="ticks" class="log"></pre>
-    </section>
+      <section class="grid" id="snapshot-jobs"></section>
+      <section class="panel">
+        <div class="panel-head">
+          <h2>Snapshot history</h2>
+        </div>
+        <p class="hint" id="snapshot-today-hint"></p>
+        <div id="snapshot-table"></div>
+      </section>
+    </div>
 
     <script src="/app.js"></script>
   </body>

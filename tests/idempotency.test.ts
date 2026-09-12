@@ -45,6 +45,7 @@ function cfgFor(dir: string, allowlistPath: string): AppConfig {
     openBrowser: false,
     logUserResults: false,
     apiKey: { sandbox: "sandbox-key", live: "live-key" },
+    snapshotApiKey: { sandbox: "", live: "" },
     messageId: { sandbox: "sandbox-msg", live: "live-msg" },
   };
 }

@@ -25,3 +25,27 @@ export function recordTick(log: TickLog): void {
 export function recentTicks(): TickLog[] {
   return [...ticks].reverse();
 }
+
+export type SnapshotLog = {
+  universeId: string;
+  job: string;
+  utcDate: string;
+  tickUnix: number;
+  newSnapshotTaken: boolean | null;
+  latestSnapshotTime: string | null;
+  httpStatus: number | null;
+  source: string;
+  note?: string;
+};
+
+const snapshotLogs: SnapshotLog[] = [];
+
+export function recordSnapshotLog(log: SnapshotLog): void {
+  snapshotLogs.push(log);
+  if (snapshotLogs.length > MAX) snapshotLogs.shift();
+  console.log(JSON.stringify({ event: "snapshot", ...log }));
+}
+
+export function recentSnapshotLogs(): SnapshotLog[] {
+  return [...snapshotLogs].reverse();
+}

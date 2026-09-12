@@ -4,7 +4,8 @@ import { readFileSync } from "node:fs";
 import { extname, join, normalize, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { msUntilNextBoundary } from "./clock.ts";
-import type { AppConfig } from "./config.ts";
+import type { AppConfig, UniverseName } from "./config.ts";
+import { takeSnapshotNow, tickSnapshots } from "./snapshot.ts";
 import { buildStatus } from "./status.ts";
 import { sendSandboxNow, tick } from "./worker.ts";
 
@@ -28,9 +29,26 @@ export function enqueueTick(cfg: AppConfig, dryRun?: boolean): Promise<void> {
   return tickChain;
 }
 
+export function enqueueSnapshots(cfg: AppConfig): Promise<void> {
+  const run = () => tickSnapshots(cfg).then(() => undefined);
+  tickChain = tickChain.then(run, run);
+  return tickChain;
+}
+
+function enqueueManualSnapshot(cfg: AppConfig, name: UniverseName) {
+  const run = () => takeSnapshotNow(cfg, name);
+  const next = tickChain.then(run, run);
+  tickChain = next.then(
+    () => undefined,
+    () => undefined,
+  );
+  return next;
+}
+
 async function schedulerLoop(cfg: AppConfig): Promise<void> {
   while (running) {
     await enqueueTick(cfg);
+    await enqueueSnapshots(cfg);
     const wait = msUntilNextBoundary(Date.now(), cfg.schedule.tickIntervalSeconds);
     await new Promise((r) => setTimeout(r, wait));
   }
@@ -90,6 +108,16 @@ export function startLocal(cfg: AppConfig): void {
       const http =
         result.error && result.results.length === 0 ? 400 : 200;
       sendJson(res, http, { ...result, status: buildStatus(cfg) });
+      return;
+    }
+    if (req.method === "POST" && url.pathname === "/api/snapshots/live") {
+      const result = await enqueueManualSnapshot(cfg, "live");
+      sendJson(res, 200, { ...result, status: buildStatus(cfg) });
+      return;
+    }
+    if (req.method === "POST" && url.pathname === "/api/snapshots/sandbox") {
+      const result = await enqueueManualSnapshot(cfg, "sandbox");
+      sendJson(res, 200, { ...result, status: buildStatus(cfg) });
       return;
     }
     if (req.method === "GET" && url.pathname === "/health") {

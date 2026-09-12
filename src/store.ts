@@ -17,6 +17,19 @@ export type SendRow = {
   created_unix: number;
 };
 
+export type SnapshotSource = "scheduled" | "manual";
+
+export type SnapshotRow = {
+  universe_id: string;
+  utc_date: string;
+  taken_unix: number;
+  new_snapshot_taken: number;
+  latest_snapshot_time: string | null;
+  http_status: number | null;
+  error: string | null;
+  source: SnapshotSource | string;
+};
+
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS sends (
   universe_id  TEXT NOT NULL,
@@ -38,6 +51,18 @@ CREATE TABLE IF NOT EXISTS moment_days (
   utc_date     TEXT NOT NULL,
   slot_key     TEXT NOT NULL,
   PRIMARY KEY (universe_id, user_id, utc_date)
+);
+
+CREATE TABLE IF NOT EXISTS snapshots (
+  universe_id           TEXT NOT NULL,
+  utc_date              TEXT NOT NULL,
+  taken_unix            INTEGER NOT NULL,
+  new_snapshot_taken    INTEGER NOT NULL,
+  latest_snapshot_time  TEXT,
+  http_status           INTEGER,
+  error                 TEXT,
+  source                TEXT NOT NULL,
+  PRIMARY KEY (universe_id, utc_date)
 );
 `;
 
@@ -136,6 +161,63 @@ export class Ledger {
       )
       .run(args.httpStatus, args.error, args.universeId, args.slotKey, args.userId);
     return result.changes === 1;
+  }
+
+  hasSnapshotToday(universeId: string, utcDate: string): boolean {
+    const row = this.db
+      .prepare("SELECT 1 AS ok FROM snapshots WHERE universe_id = ? AND utc_date = ?")
+      .get(universeId, utcDate) as { ok: number } | undefined;
+    return Boolean(row);
+  }
+
+  getSnapshot(universeId: string, utcDate: string): SnapshotRow | null {
+    const row = this.db
+      .prepare(
+        `SELECT universe_id, utc_date, taken_unix, new_snapshot_taken, latest_snapshot_time,
+                http_status, error, source
+           FROM snapshots
+          WHERE universe_id = ? AND utc_date = ?`,
+      )
+      .get(universeId, utcDate) as SnapshotRow | undefined;
+    return row ?? null;
+  }
+
+  /** INSERT OR IGNORE. Unique conflict means this UTC day is already recorded. */
+  recordSnapshot(row: SnapshotRow): { inserted: boolean; row: SnapshotRow } {
+    const result = this.db
+      .prepare(
+        `INSERT OR IGNORE INTO snapshots
+          (universe_id, utc_date, taken_unix, new_snapshot_taken, latest_snapshot_time,
+           http_status, error, source)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .run(
+        row.universe_id,
+        row.utc_date,
+        row.taken_unix,
+        row.new_snapshot_taken,
+        row.latest_snapshot_time,
+        row.http_status,
+        row.error,
+        row.source,
+      );
+    const existing = this.getSnapshot(row.universe_id, row.utc_date);
+    if (!existing) {
+      throw new Error("recordSnapshot: row missing after INSERT OR IGNORE");
+    }
+    return { inserted: result.changes === 1, row: existing };
+  }
+
+  recentSnapshots(limit = 30): SnapshotRow[] {
+    return this.db
+      .prepare(
+        `SELECT universe_id, utc_date, taken_unix, new_snapshot_taken, latest_snapshot_time,
+                http_status, error, source
+           FROM snapshots
+          ORDER BY utc_date DESC, taken_unix DESC
+          LIMIT ?`,
+      )
+      .all(limit) as SnapshotRow[];
   }
 
   recentSends(limit = 20): SendRow[] {

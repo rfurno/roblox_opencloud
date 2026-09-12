@@ -69,3 +69,60 @@ export function isNonRetryable(status: number): boolean {
 export function isSuccess(status: number): boolean {
   return status >= 200 && status < 300;
 }
+
+export type SnapshotRequest = {
+  universeId: string;
+  apiKey: string;
+};
+
+export type SnapshotApiResult = {
+  status: number;
+  body: string;
+  newSnapshotTaken: boolean | null;
+  latestSnapshotTime: string | null;
+};
+
+export function snapshotUrl(universeId: string): string {
+  return `https://apis.roblox.com/cloud/v2/universes/${universeId}/data-stores:snapshot`;
+}
+
+export function parseSnapshotBody(body: string): {
+  newSnapshotTaken: boolean | null;
+  latestSnapshotTime: string | null;
+} {
+  if (!body) return { newSnapshotTaken: null, latestSnapshotTime: null };
+  try {
+    const parsed = JSON.parse(body) as {
+      newSnapshotTaken?: unknown;
+      latestSnapshotTime?: unknown;
+    };
+    return {
+      newSnapshotTaken: typeof parsed.newSnapshotTaken === "boolean" ? parsed.newSnapshotTaken : null,
+      latestSnapshotTime:
+        typeof parsed.latestSnapshotTime === "string" ? parsed.latestSnapshotTime : null,
+    };
+  } catch {
+    return { newSnapshotTaken: null, latestSnapshotTime: null };
+  }
+}
+
+export async function snapshotDataStores(req: SnapshotRequest): Promise<SnapshotApiResult> {
+  if (!req.apiKey) {
+    return { status: 0, body: "missing api key", newSnapshotTaken: null, latestSnapshotTime: null };
+  }
+  if (!req.universeId) {
+    return { status: 0, body: "missing universe id", newSnapshotTaken: null, latestSnapshotTime: null };
+  }
+
+  const res = await fetch(snapshotUrl(req.universeId), {
+    method: "POST",
+    headers: {
+      "x-api-key": req.apiKey,
+      "Content-Type": "application/json",
+    },
+    body: "{}",
+  });
+  const body = await res.text();
+  const parsed = parseSnapshotBody(body);
+  return { status: res.status, body, ...parsed };
+}

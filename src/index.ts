@@ -1,5 +1,6 @@
 import { loadConfig, type UniverseName } from "./config.ts";
 import { startLocal } from "./server.ts";
+import { tickSnapshots } from "./snapshot.ts";
 import { tick } from "./worker.ts";
 
 function parseArgs(argv: string[]) {
@@ -23,6 +24,7 @@ const args = parseArgs(process.argv.slice(2));
 
 if (args.once) {
   await tick(cfg, { dryRun: args.dryRun, universes: args.universes });
+  await tickSnapshots(cfg, { universes: args.universes });
 } else {
   startLocal(cfg);
 }

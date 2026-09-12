@@ -10,6 +10,7 @@ import {
 import type { AppConfig, UniverseName } from "./config.ts";
 import { apiKeyConfigured, jobOf, messageIdConfigured, universeNames } from "./config.ts";
 import { recentTicks } from "./logs.ts";
+import { snapshotStatus } from "./snapshot.ts";
 
 export type PublicSlot = {
   key: string;
@@ -90,11 +91,16 @@ export function buildStatus(cfg: AppConfig, nowUnix = Math.floor(Date.now() / 10
       sandbox: apiKeyConfigured(cfg.apiKey.sandbox),
       live: apiKeyConfigured(cfg.apiKey.live),
     },
+    snapshotKeysConfigured: {
+      sandbox: apiKeyConfigured(cfg.snapshotApiKey.sandbox),
+      live: apiKeyConfigured(cfg.snapshotApiKey.live),
+    },
     messageConfigured: {
       sandbox: messageIdConfigured(cfg.messageId.sandbox),
       live: messageIdConfigured(cfg.messageId.live),
     },
     jobs,
+    snapshots: snapshotStatus(cfg, nowUnix),
     ticks: recentTicks(),
   };
 }

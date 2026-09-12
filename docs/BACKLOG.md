@@ -32,6 +32,7 @@ IDs in this repo: `OC-*`. TCG follow-ups (other repo): `TCG-OC-*` with status **
 | OC-15 | P2 | DataStore audience | Read TCG store via Open Cloud when it exists. 14-day recency. Fallback to allowlist if missing. Time-budget sandbox or split processes (shared 16:00 window). **Blocked on TCG-OC-02.** |
 | OC-16 | P2 | `{localTime}` parameter | Optional dashboard param from per-user IANA zone. Display only. Missing zone → relative sentence. |
 | OC-17 | P2 | Tick metrics | Stdout JSON tick logs (no `tick_log` table). Alert on 400, unexpected skip, and stopped Machine. |
+| OC-18 | P1 | Daily DataStore snapshot | Live `universe-datastores.control:snapshot` key in `ROBLOX_API_KEY_LIVE_SNAPSHOT`. One POST per UTC day; skip Collector send window; ledger in `live.sqlite`; dashboard Snapshots tab. Independent of `DRY_RUN`. |
 
 ---
 
