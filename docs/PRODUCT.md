@@ -1,6 +1,6 @@
-# roblox_opencloud — Product
+# Gachamon OpenCloud Controller — Product
 
-**Status:** Draft, 2026-09-10. Local scheduler + dashboard implemented (`npm start`). HTTP still dry-run by default. Spec: `roblox_gacha/docs/COLLECTOR_OPEN_CLOUD_NOTIFICATIONS.md`.
+**Status:** Draft, 2026-09-12. Local scheduler + dashboard implemented (`npm start`). MOMENT HTTP still dry-run by default. Daily Live DataStore snapshot is independent of `DRY_RUN`. Spec: `roblox_gacha/docs/COLLECTOR_OPEN_CLOUD_NOTIFICATIONS.md`.
 
 **Places** (same ids as TCG)
 
@@ -19,12 +19,14 @@ The Collector visits shops on a **wall clock**, not “N minutes after you join.
 
 It is a Roblox **experience notification** (`MOMENT`) via Open Cloud — not SMS, email, or Discord. Creators cannot use those channels.
 
+The same process also takes **one Live DataStore snapshot per UTC day**. That is a versioning pin (keys current at snapshot time stay restorable ~30 days), not a downloadable backup and not a Collector trigger.
+
 ## Who it is for
 
 | Person | Role |
 | --- | --- |
 | **Shop owner (13+, Notify bell on)** | Offline when a Collector slot approaches; needs a reason to open Roblox and join the place before `slotUnix` |
-| **Operator (this repo)** | One-person live-ops: allowlist, keys, Fly machine, compare slots to TCG logs |
+| **Operator (this repo)** | One-person live-ops: allowlist, keys, Fly machine, compare slots to TCG logs, confirm the daily Live snapshot landed |
 | **Not for** | Under-13; players who never claimed a lot; Studio Play testers (out of scope) |
 
 ## Job to be done
@@ -62,6 +64,7 @@ v1 is an allowlist of tens of userIds, not CCU. Metrics are operational, not van
 | Live notify hour | MOMENT spends the 1/day cap on **16:00 UTC** (13:00 Brazil), not 04:00 UTC (01:00 Brazil). TCG still spawns at 04 |
 | Game still owns spawn | Ignore the ping and join after `slotUnix + 600` → no Collector (TCG) |
 | In-server players | Still get TCG toast at T−2 min; at most one Open Cloud MOMENT that UTC day |
+| Live snapshot | One `data-stores:snapshot` POST per UTC day when `ROBLOX_API_KEY_LIVE_SNAPSHOT` is set; skip Collector send windows; ledger unique `(universe, utc_date)` |
 
 ## Constraints from Roblox (do not weaken)
 
@@ -74,6 +77,14 @@ Documented on Creator Hub / experience-notifications guide; verify if they chang
 - `payload.type` must be `"MOMENT"` (only supported type).
 - Notification **string** is created in Creator Dashboard; there is no Open Cloud API to create copy.
 - API key scoped to **that universe** only.
+
+DataStore snapshots (separate key; do not weaken):
+
+- Scope **`universe-datastores.control:snapshot`** on Live `6674250544` only. Not the notifications key.
+- **One snapshot per UTC day** per experience. A second POST that day is a no-op and returns `latestSnapshotTime`.
+- Snapshot is a **versioning pin**, not a dump. Data current at snapshot time is a versioned backup for ~**30 days**.
+- Roblox has **no list-snapshots API**. This controller’s history is local sqlite.
+- Restore (not this service) needs `objects:read` / version-at-time, not the snapshot scope.
 
 ## Rollout stages
 
@@ -99,8 +110,8 @@ Rollback is “Ctrl-C / set `DRY_RUN=true`.” TCG spawn is unaffected. The lapt
 | Sandbox notify slots | up to 4; Roblox 1/day cap still applies — arm one hour per test user |
 | Send window | 60 seconds once per slot |
 | Audience | tens of userIds |
-| HTTP | 1 POST per user per sent slot, sequential |
-| Ledger | O(users × **notify** slots) — ~10 users × 1 Live notify/day × 365 ≈ **3.65k** Live rows/year |
+| HTTP | 1 POST per user per sent slot, sequential; plus 1 Live snapshot POST per UTC day |
+| Ledger | O(users × **notify** slots) — ~10 users × 1 Live notify/day × 365 ≈ **3.65k** Live send rows/year. Snapshots: 1 Live row/UTC day |
 
 ## Out of scope
 
@@ -111,3 +122,4 @@ Rollback is “Ctrl-C / set `DRY_RUN=true`.” TCG spawn is unaffected. The lapt
 - Studio Play slots
 - Inventing a Live blast list
 - A general Open Cloud platform for other Gachamon features
+- Downloading DataStore contents or implementing key restore from a snapshot time

@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Local Open Cloud controller for Gachamon Collector experience notifications",
+  "description": "Gachamon OpenCloud Controller — Collector notifications and DataStore snapshots",
   "engines": {
     "node": ">=22"
   },

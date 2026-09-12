@@ -1,6 +1,6 @@
-# roblox_opencloud — Architecture
+# Gachamon OpenCloud Controller — Architecture
 
-**Status:** Draft, 2026-09-10. **v1 host is this laptop** (`npm start` + localhost dashboard). Fly remains a later always-on option. Numbers must match [PRODUCT.md](PRODUCT.md) and [OPERATIONS.md](OPERATIONS.md).
+**Status:** Draft, 2026-09-12. **v1 host is this laptop** (`npm start` + localhost dashboard, Collector + Snapshots tabs). Fly remains a later always-on option. Numbers must match [PRODUCT.md](PRODUCT.md) and [OPERATIONS.md](OPERATIONS.md).
 
 Clock source of truth is TCG, not this repo:
 
@@ -30,7 +30,8 @@ If controller and game disagree on `slotUnix`, **fix the controller**.
 | `sendWindowSeconds` | `60` |
 | `inGameToastLeadSeconds` | `120` (game only) |
 | `catchWindowSeconds` | `600` (game only) |
-| `tickIntervalSeconds` | `30` (`await tick()` then sleep to next boundary; no overlap) |
+| `tickIntervalSeconds` | `30` (`await tick()` then `await tickSnapshots()` then sleep to next boundary; no overlap) |
+| Live snapshot | 1 POST / UTC day; `universe-datastores.control:snapshot`; independent of `DRY_RUN` |
 | `payload.type` | `MOMENT` |
 | `analytics_data.category` | `collector_incoming` |
 | `launch_data` | `collector:<slotKey>` |
@@ -66,25 +67,27 @@ sandbox:
 ```
 npm start  (this laptop, TZ=UTC, 30s tick)
     │
-    ├─ http://127.0.0.1:3848   dashboard (status + dry-run tick)
+    ├─ http://127.0.0.1:3848   dashboard (Collector + Snapshots)
     ├─ config/schedule.json + allowlist.*.json
-    ├─ .env: ROBLOX_API_KEY_* , MESSAGE_ID_*
+    ├─ .env: ROBLOX_API_KEY_* , ROBLOX_API_KEY_*_SNAPSHOT , MESSAGE_ID_*
     │
     ├─ clock.ts          slotKey / slotUnix / pushAt
     ├─ audience.ts       v1 JSON allowlist
     ├─ store.ts          sqlite ./data/{sandbox,live}.sqlite
-    └─ roblox.ts         POST apis.roblox.com/.../notifications
+    ├─ snapshot.ts       1 Live DataStore snapshot / UTC day
+    └─ roblox.ts         POST notifications + data-stores:snapshot
                               │
                               ▼
                      Roblox Notification Center
                      (Join → TCG place; game owns spawn)
+                     + DataStore versioning pin (~30 days)
 ```
 
 This service never talks to TCG remotes, ProfileStore, or MessagingService.
 
 ```mermaid
 flowchart TD
-  cron["await tick then sleep to next floor now/30 *30+30"] --> jobs["Universe jobs: sandbox, then live"]
+  cron["await tick then await tickSnapshots then sleep to next floor now/30 *30+30"] --> jobs["Universe jobs: sandbox, then live"]
   jobs --> slots["clockSlotsNear from hoursLocal"]
   slots --> dropStudio{"key starts with studio:?"}
   dropStudio -->|yes| skipStudio["Never send"]
@@ -109,6 +112,17 @@ flowchart TD
   ok -->|"2xx"| persist["Mark sent + utc_day"]
   ok -->|"400 / 403 / 404"| fail["Mark failed, no retry"]
   ok -->|"429 / 5xx / crash"| leave["Leave pending"]
+  jobs --> snapWin{"Collector notify window open?"}
+  snapWin -->|yes| skipSnap["No snapshot HTTP this tick"]
+  snapWin -->|no| snapDay{"snapshots row this UTC day?"}
+  snapDay -->|yes| skipSnapDay["Skip"]
+  snapDay -->|no| snapKey{"ROBLOX_API_KEY_*_SNAPSHOT set?"}
+  snapKey -->|no| skipSnapKey["Skip universe"]
+  snapKey -->|yes| snapPost["POST data-stores:snapshot"]
+  snapPost --> snapOk{"HTTP"}
+  snapOk -->|"2xx"| snapRow["INSERT OR IGNORE snapshots"]
+  snapOk -->|"429 / 5xx"| snapRetry["Leave unrecorded; next tick"]
+  snapOk -->|"400 / 403 / 404"| snapFail["Log; no row"]
 ```
 
 ```mermaid
@@ -218,7 +232,9 @@ catchEnd    = 1789057033          // 16:17:13Z  game only
 
 ### Send window
 
-**One tick at a time.** `await tick()` (including every POST) **then** sleep until `floor(now/30)*30+30`. Never arm the next timeout at the start of `tick` — overlapping ticks would double-POST a `pending` row. No in-tick 429 backoff (leave `pending`; next 30s tick retries) so ticks stay short. No `sending` status in v1.
+**One tick at a time.** `await tick()` (including every MOMENT POST) **then** `await tickSnapshots()` **then** sleep until `floor(now/30)*30+30`. Never arm the next timeout at the start of `tick` — overlapping ticks would double-POST a `pending` row. Snapshot HTTP is on the same chain so it cannot overlap MOMENT POSTs. No in-tick 429 backoff (leave `pending`; next 30s tick retries) so ticks stay short. No `sending` status in v1.
+
+Scheduled snapshots **skip** while any Collector **notify** slot is in its 60s send window, then retry next tick. Manual dashboard snapshot does not wait. Snapshots do **not** honor `DRY_RUN` (that flag is MOMENT-only).
 
 A slot is eligible to **send** iff the **`hoursLocal` hour used to build that slot** is in `notifyHoursLocal` **and** `now ∈ [slotUnix - 480, slotUnix - 480 + 60)`. `notifyHoursLocal` ⊆ `hoursLocal` in the **same** IANA zone — not a second UTC conversion, not `slotKey`’s UTC hour unless the zone is `Etc/UTC`. Visit hours still compute every TCG slot. If `pushAt` is past, **skip**. Do not send in the toast window or after spawn.
 
@@ -256,7 +272,7 @@ Assert identical `key` / `slotUnix`. Freeze DST dates `2026-03-08`, `2026-11-01`
 
 Python is viable only if every FNV multiply is `float` (not `int`). GitHub Actions: official shortest schedule is **5 minutes**, and jobs delay under load — unhittable for a 60s window. Vercel Cron is not a process clock.
 
-v1: **one process**, two isolated jobs per tick (sandbox then live). **Confirmed 2026-09-10 (user)** — not two Fly processes from the start. Separate sqlite files, keys, hours, allowlists. Shared 16:00 window: sequential is fine at allowlist scale.
+v1: **one process**, two isolated MOMENT jobs per tick (sandbox then live), then the snapshot pass. **Confirmed 2026-09-10 (user)** — not two Fly processes from the start. Separate sqlite files, keys, hours, allowlists. Shared 16:00 window: sequential is fine at allowlist scale. Snapshot HTTP waits until after that window.
 
 ---
 
@@ -273,7 +289,7 @@ src/
   config.ts         schedule.json + .env
   server.ts         127.0.0.1 dashboard + 30s scheduler
   index.ts          npm start | npm run tick --once
-public/             local dashboard
+public/             local dashboard (Collector + Snapshots tabs)
 config/
   schedule.json
   allowlist.sandbox.json
@@ -281,6 +297,7 @@ config/
 tests/
   clock.test.ts
   idempotency.test.ts
+  snapshot.test.ts
 ```
 
 ```bash
@@ -289,7 +306,7 @@ npm start
 npm run tick -- --universe sandbox --dry-run
 ```
 
-`--dry-run` / `DRY_RUN=true`: compute and log, **no HTTP**, **no writes** to `sends` or `moment_days`. Default locally. Dry-run then live tick **must still POST**. Dry-run does not need API keys.
+`--dry-run` / `DRY_RUN=true`: compute and log MOMENTs, **no notification HTTP**, **no writes** to `sends` or `moment_days`. Default locally. Dry-run then live tick **must still POST**. MOMENT dry-run does not need notification keys. **`tickSnapshots` still POSTs** if `ROBLOX_API_KEY_LIVE_SNAPSHOT` (or sandbox) is set. Dashboard **Tick now** is MOMENT dry-run only and does not take a snapshot; **Take snapshot now** does.
 
 ---
 
@@ -330,6 +347,36 @@ Live: `universes/6674250544` + `MESSAGE_ID_LIVE`. Client must refuse a send if `
 Concurrency v1 = **1** sequential POSTs inside one `await tick()`. Allowlist tens of ids. Do not overlap ticks.
 
 Docs: [User notifications (Open Cloud)](https://create.roblox.com/docs/cloud/guides/experience-notifications).
+
+### DataStore snapshot
+
+```
+POST https://apis.roblox.com/cloud/v2/universes/{universeId}/data-stores:snapshot
+Header: x-api-key: <ROBLOX_API_KEY_LIVE_SNAPSHOT>
+Header: Content-Type: application/json
+Body: {}
+```
+
+```json
+{
+  "newSnapshotTaken": true,
+  "latestSnapshotTime": "2026-09-12T00:05:12Z"
+}
+```
+
+Scope: **`universe-datastores.control:snapshot`**. Live env `ROBLOX_API_KEY_LIVE_SNAPSHOT` (universe `6674250544` only). Optional `ROBLOX_API_KEY_SANDBOX_SNAPSHOT`. Never reuse the notifications key. Sandbox snapshot HTTP never uses universe `6674250544`.
+
+| HTTP | Action |
+| --- | --- |
+| 2xx | `INSERT OR IGNORE` into `snapshots` for `(universe_id, utc_date)`. `newSnapshotTaken: false` still records the day (Roblox no-op) |
+| already a row today | no HTTP |
+| Collector notify window open (scheduled only) | no HTTP this tick |
+| 400 / 403 / 404 | log; no row |
+| 429 / 5xx / network | no row; next 30s tick retries |
+
+Roblox: one snapshot per UTC day per experience. This is a versioning pin (~30 days), not a dump. No list-snapshots API — dashboard history is local sqlite.
+
+Docs: [Snapshot Data Stores](https://create.roblox.com/docs/cloud/reference/DataStore#Cloud_SnapshotDataStores), [versioning](https://create.roblox.com/docs/cloud-services/data-stores/versioning-listing-and-caching#snapshots).
 
 ---
 
@@ -372,6 +419,18 @@ CREATE TABLE moment_days (
   slot_key     TEXT NOT NULL,
   PRIMARY KEY (universe_id, user_id, utc_date)
 );
+
+CREATE TABLE snapshots (
+  universe_id           TEXT NOT NULL,
+  utc_date              TEXT NOT NULL,      -- YYYY-MM-DD of POST, UTC
+  taken_unix            INTEGER NOT NULL,
+  new_snapshot_taken    INTEGER NOT NULL,   -- 1 if Roblox created a new pin
+  latest_snapshot_time  TEXT,               -- Roblox RFC-3339 UTC
+  http_status           INTEGER,
+  error                 TEXT,
+  source                TEXT NOT NULL,      -- scheduled | manual
+  PRIMARY KEY (universe_id, utc_date)
+);
 ```
 
 **`INSERT OR IGNORE` then `SELECT`.** Unique conflict is not “already sent”:
@@ -386,9 +445,11 @@ CREATE TABLE moment_days (
 
 `utc_date` is the UTC calendar date of **send time**. Enforces Roblox’s one MOMENT per user per **UTC day** (not host local). **Confirmed 2026-09-10 (user).** Live still uses `notifyHoursLocal: [16]` so 04:00 never spends that row.
 
-No `tick_log` table — stdout JSON only.
+`snapshots.utc_date` is the UTC calendar date of the snapshot POST. Unique `(universe_id, utc_date)`. 429/5xx do not insert, so the next tick retries. `new_snapshot_taken = 0` still counts as the day’s row (Roblox already had a snapshot that UTC day).
 
-Ledger growth: O(users × notify slots). Tiny at allowlist scale.
+No `tick_log` table — stdout JSON only (MOMENT ticks plus `{ "event": "snapshot", ... }`).
+
+Ledger growth: O(users × notify slots) plus 1 snapshot row per universe per UTC day. Tiny at allowlist scale.
 
 ---
 
@@ -396,7 +457,7 @@ Ledger growth: O(users × notify slots). Tiny at allowlist scale.
 
 **v1 is local.** `npm start` must be running and the laptop awake through `[pushAt, pushAt+60)`. Sleep/lid-close is a missed send.
 
-The dashboard is **not** a public HTTP service. It binds `127.0.0.1` only. The in-page **Tick now** button always dry-runs.
+The dashboard is **not** a public HTTP service. It binds `127.0.0.1` only. Tabs: **Collector** | **Snapshots**. The in-page **Tick now** button always dry-runs MOMENTs. **Take snapshot now** POSTs Open Cloud (1/UTC day).
 
 | Option | Use? |
 | --- | --- |
@@ -446,17 +507,18 @@ Load: Live **1 notify** slot/day (16) + Sandbox up to 4 (1/day cap per user); te
 - API keys and message ids **only** in Fly secrets / local `.env`. Placeholders in `.env.example`. Never log `x-api-key`. **Never in GitHub Actions.**
 - Do **not** IP-allowlist Roblox keys unless a Fly **dedicated** egress IPv4 is documented (Fly shared egress is not stable; a laptop-locked key 403s from Fly).
 - Job object binds `universeId` + key + allowlist. Tests: Sandbox fixture never contains `6674250544`. Rotate both keys if mixed.
-- Live HTTP requires `LIVE_SENDS_ENABLED=true` **and** a non-empty Live allowlist.
-- Local dashboard binds `127.0.0.1` only. It never returns API keys. UI tick is dry-run only.
+- Snapshot keys are **separate** (`ROBLOX_API_KEY_LIVE_SNAPSHOT`). Live snapshot HTTP uses Live universe id only; Sandbox snapshot never uses `6674250544`.
+- Live **MOMENT** HTTP requires `LIVE_SENDS_ENABLED=true` **and** a non-empty Live allowlist. Live **snapshot** HTTP requires only the snapshot key.
+- Local dashboard binds `127.0.0.1` only. It never returns API keys. UI tick is dry-run only. Snapshot button is real HTTP.
 - PII = Roblox `userId` only. Do not commit a large Live player list.
 
 ---
 
 ## Observability
 
-One JSON log line per tick (no secrets): `universeId`, `tickUnix`, `slotKey`, `slotUnix`, `pushAt`, `audienceN`, `sentN`, `failN`, `skipN`, `dryRun`.
+One JSON log line per MOMENT tick (no secrets): `universeId`, `tickUnix`, `slotKey`, `slotUnix`, `pushAt`, `audienceN`, `sentN`, `failN`, `skipN`, `dryRun`. Snapshot lines: `{ "event": "snapshot", universeId, job, utcDate, newSnapshotTaken, latestSnapshotTime, httpStatus, source }`.
 
-Alert (human, v1): any 400; machine down around a known `pushAt`; zero sends in an expected Sandbox window with a non-empty allowlist; **`fly status` stopped/suspended = P0**.
+Alert (human, v1): any 400; machine down around a known `pushAt`; zero sends in an expected Sandbox window with a non-empty allowlist; Live snapshot key set but no `snapshots` row for yesterday UTC; **`fly status` stopped/suspended = P0**.
 
 How to verify a slot against TCG: [OPERATIONS.md](OPERATIONS.md).
 
@@ -473,6 +535,8 @@ How to verify a slot against TCG: [OPERATIONS.md](OPERATIONS.md).
 | 1/day cap on 04:00 UTC | High if unfixed | Live `notifyHoursLocal: [16]` |
 | Nobody opted in (403) | Med | Expected until TCG `PromptOptIn` |
 | TCG changes hours without this repo | Med | Hours in YAML; compare to `NPCConfig.lua` |
+| Missed UTC-day snapshot (laptop asleep all day) | Med | Same host as MOMENT; dashboard Snapshots tab; retry next tick if 429 |
+| Snapshot key mixed with notifications key | High | Separate env vars; 403 = wrong scope |
 
 ---
 

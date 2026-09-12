@@ -1,6 +1,6 @@
-# roblox_opencloud
+# Gachamon OpenCloud Controller
 
-External **Open Cloud controller** for [Gachamon TCG](https://www.roblox.com/games/98219898516303/Gachamon-TCG). It sends Roblox **experience notifications** (`MOMENT`) so shop owners who are **offline** still hear that The Collector is coming.
+External Open Cloud controller for [Gachamon TCG](https://www.roblox.com/games/98219898516303/Gachamon-TCG). It sends Roblox **experience notifications** (`MOMENT`) so shop owners who are **offline** still hear that The Collector is coming, and it takes a **daily Live DataStore snapshot** so player data has a 30-day versioning pin.
 
 **v1 host:** this laptop. `npm start` runs a 30s scheduler and opens a local dashboard at `http://127.0.0.1:3848`. Fly is later.
 
@@ -9,7 +9,7 @@ The TCG game only toasts players already in a running server (T−2 min). Arriva
 - Game repo (private): [rfurno/roblox_gacha](https://github.com/rfurno/roblox_gacha)
 - Spec: `roblox_gacha/docs/COLLECTOR_OPEN_CLOUD_NOTIFICATIONS.md`
 
-**Status (2026-09-10):** Local scheduler + dashboard. Dry-run by default. Do not send Live notifications.
+**Status (2026-09-12):** Local scheduler + dashboard (Collector + Snapshots tabs). MOMENT dry-run by default. Do not send Live notifications. Daily Live snapshot is independent of `DRY_RUN` (needs `ROBLOX_API_KEY_LIVE_SNAPSHOT`).
 
 ## Run locally
 
@@ -20,7 +20,7 @@ npm test
 npm start              # scheduler + http://127.0.0.1:3848
 ```
 
-Keep the machine awake (`caffeinate -i npm start` on macOS). The dashboard binds **127.0.0.1** only. The **Tick now** button is always dry-run (no HTTP, no ledger). The **Snapshots** tab shows Live DataStore snapshot history (one per UTC day; needs `ROBLOX_API_KEY_LIVE_SNAPSHOT`).
+Keep the machine awake (`caffeinate -i npm start` on macOS). The dashboard binds **127.0.0.1** only. Tabs: **Collector** | **Snapshots**. **Tick now** is always dry-run (no MOMENT HTTP, no send ledger). Snapshots still run on the 30s tick when the snapshot key is set.
 
 One-shot (no browser):
 
@@ -28,7 +28,7 @@ One-shot (no browser):
 npm run tick -- --universe sandbox --dry-run
 ```
 
-Secrets stay in `.env` (gitignored). Dry-run does not need API keys.
+Secrets stay in `.env` (gitignored). MOMENT dry-run does not need notification keys. Daily snapshots need `ROBLOX_API_KEY_LIVE_SNAPSHOT` (not the notifications key).
 
 ## What this is / is not
 
@@ -38,6 +38,7 @@ Secrets stay in `.env` (gitignored). Dry-run does not need API keys.
 | POST Open Cloud MOMENT at `slotUnix − 480s` for **notify hours** | Send in-game `COLLECTOR_INCOMING` toasts |
 | Allowlist (Sandbox first); Live notify hour **16** only | Blast all Live players; spend the 1/day cap on 04:00 UTC |
 | Persist an idempotent send ledger under `./data` | Use MessagingService as offline notify |
+| POST one Live DataStore snapshot per UTC day | Download a dump, list Roblox snapshots, or restore keys |
 | Run when CCU is 0, if this process is up | Notify Studio Play `studio:<index>` slots |
 
 ## Places
@@ -53,6 +54,7 @@ Secrets stay in `.env` (gitignored). Dry-run does not need API keys.
 | Event | When |
 | --- | --- |
 | Open Cloud MOMENT | `slotUnix − 480s` (8 min), window 60s, notify hours only |
+| Live DataStore snapshot | First 30s tick of the UTC day with a snapshot key set; skips Collector send windows; 1/UTC day |
 | In-game toast | `slotUnix − 120s` — **game only** |
 | Collector spawn | `slotUnix` — **game only** |
 

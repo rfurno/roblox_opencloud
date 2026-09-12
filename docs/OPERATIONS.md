@@ -1,6 +1,6 @@
-# roblox_opencloud — Operations
+# Gachamon OpenCloud Controller — Operations
 
-**Status:** Draft, 2026-09-10. **v1 runbook is local** (`npm start`). Fly section is later. Numbers match [ARCHITECTURE.md](ARCHITECTURE.md).
+**Status:** Draft, 2026-09-12. **v1 runbook is local** (`npm start`). Fly section is later. Numbers match [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ```bash
 cp .env.example .env    # DRY_RUN=true
@@ -9,20 +9,20 @@ npm test
 caffeinate -i npm start # macOS: stay awake
 ```
 
-Dashboard: `http://127.0.0.1:3848`. Bind is loopback. **Tick now** is dry-run only.
+Dashboard: `http://127.0.0.1:3848`. Bind is loopback. Tabs: **Collector** | **Snapshots**. **Tick now** is MOMENT dry-run only. **Take snapshot now** POSTs Open Cloud (one per UTC day).
 
-**If this process is not running at `pushAt`, that is a miss.** Do not close the lid through a send window.
+**If this process is not running at `pushAt`, that is a missed MOMENT.** If it is down for a whole UTC day, that is a missed Live snapshot. Do not close the lid through a send window.
 
 ---
 
 ## Environments
 
-| Job | Universe | Place | Visit hours UTC | Notify hours (send) | API key env | Message id env | Allowlist | Sqlite |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| sandbox | `7034342160` | `117194948580255` | 4, 10, 16, 22 | same, or subset for a test day | `ROBLOX_API_KEY_SANDBOX` | `MESSAGE_ID_SANDBOX` | `config/allowlist.sandbox.json` | `./data/sandbox.sqlite` |
-| live | `6674250544` | `98219898516303` | 16, 4 | **16 only** | `ROBLOX_API_KEY_LIVE` | `MESSAGE_ID_LIVE` | `config/allowlist.live.json` | `./data/live.sqlite` |
+| Job | Universe | Place | Visit hours UTC | Notify hours (send) | Notify key | Snapshot key | Message id env | Allowlist | Sqlite |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| sandbox | `7034342160` | `117194948580255` | 4, 10, 16, 22 | same, or subset for a test day | `ROBLOX_API_KEY_SANDBOX` | `ROBLOX_API_KEY_SANDBOX_SNAPSHOT` (optional) | `MESSAGE_ID_SANDBOX` | `config/allowlist.sandbox.json` | `./data/sandbox.sqlite` |
+| live | `6674250544` | `98219898516303` | 16, 4 | **16 only** | `ROBLOX_API_KEY_LIVE` | `ROBLOX_API_KEY_LIVE_SNAPSHOT` | `MESSAGE_ID_LIVE` | `config/allowlist.live.json` | `./data/live.sqlite` |
 
-Never paste a Live key into a Sandbox curl, or the reverse.
+Never paste a Live key into a Sandbox curl, or the reverse. Never put the snapshot key in `ROBLOX_API_KEY_LIVE` (wrong scope).
 
 `LIVE_SENDS_ENABLED` defaults **false**. Live `notifyHoursLocal: [16]` so the 1/day cap is not spent on 04:00 UTC (01:00 Brazil). TCG still spawns at 04.
 
@@ -43,7 +43,7 @@ Live and Sandbox **share the 16:00 UTC send window** (same `slotKey` → same ji
 | `MESSAGE_ID_SANDBOX` | for Sandbox HTTP | Creator Dashboard notification string asset id |
 | `MESSAGE_ID_LIVE` | for Live HTTP | Separate string |
 | `LIVE_SENDS_ENABLED` | no | `false` unless explicitly enabling Live |
-| `DRY_RUN` | no | `true` locally. Log-only: **no** `sends` / `moment_days` writes |
+| `DRY_RUN` | no | `true` locally. MOMENT log-only: **no** `sends` / `moment_days` writes. Does **not** skip DataStore snapshots |
 | `PORT` | no | dashboard port, default `3848` |
 | `OPEN_BROWSER` | no | `true` to `open` the dashboard |
 | `DATA_DIR` | no | default `/data` on Fly, `./data` locally |
@@ -82,7 +82,7 @@ Not required for the daily create:
 | `DRY_RUN=false` / `LIVE_SENDS_ENABLED` | Snapshots are independent of MOMENT sends |
 | IP allowlist on the key | Same rule as notifications — do not lock to a laptop IP |
 
-**Routine:** `npm start` with `ROBLOX_API_KEY_LIVE_SNAPSHOT` set. After each 30s Collector tick, if this UTC day has no Live row in `./data/live.sqlite` (`snapshots` table), POST
+**Routine:** `npm start` with `ROBLOX_API_KEY_LIVE_SNAPSHOT` set. After each 30s Collector tick (`npm run tick --once` does the same after its MOMENT pass), if this UTC day has no Live row in `./data/live.sqlite` (`snapshots` table), POST
 
 ```
 POST https://apis.roblox.com/cloud/v2/universes/6674250544/data-stores:snapshot
@@ -113,11 +113,12 @@ Do not commit real keys or real message ids. **Do not put `ROBLOX_API_KEY_*` in 
    - Title: `The Collector`
    - Body: `The Collector is on the way to your shop. Be there in about 8 minutes.`
 4. Copy the string **asset id** into `MESSAGE_ID_SANDBOX` or `MESSAGE_ID_LIVE`.
-5. Create an API key with permission to send user notifications **for that universe only**. Store in local `.env`. Do not IP-allowlist unless this machine has a stable egress IP.
+5. Create an API key with permission to send user notifications **for that universe only**. Store in local `.env` as `ROBLOX_API_KEY_SANDBOX` / `ROBLOX_API_KEY_LIVE`. Do not IP-allowlist unless this machine has a stable egress IP.
+5b. **Live snapshot (OC-18):** separate API key, Live universe `6674250544` only, operation **`universe-datastores.control:snapshot`**. Store as `ROBLOX_API_KEY_LIVE_SNAPSHOT`. Optional Sandbox twin. Do not IP-allowlist.
 6. **Visit count (OC-13 blocker):** Creator Hub → the experience → Analytics / the public experience page. Confirm **≥100 visits**. If Sandbox is under 100, OC-13 is **blocked** — MOMENT sends will fail eligibility. Play-test Sandbox until the counter clears 100; do not assume the worker is broken.
 7. Recipients must be 13+ and have the experience **Notify** bell on. Until TCG ships `PromptOptIn()` (`TCG-OC-03`), opt in from the experience page.
 
-**Dashboard:** Sandbox card → **Send notification now**. Bypasses `DRY_RUN` and the 8-minute window. Live has no such button. Restart `npm start` after `.env` changes. Writes `moment_days` (Roblox 1/day cap), so a later scheduled send that UTC day is skipped.
+**Dashboard:** Collector tab → Sandbox **Send notification now**. Bypasses `DRY_RUN` and the 8-minute window. Live has no such button. Snapshots tab → **Take snapshot now** (real HTTP; 1/UTC day). Restart `npm start` after `.env` changes. MOMENT writes `moment_days` (Roblox 1/day cap), so a later scheduled send that UTC day is skipped.
 
 Manual curl (off-clock Stage-2 probe; burns that user’s UTC-day cap):
 
@@ -149,7 +150,8 @@ fly volumes create opencloud_data --region iad --size 1 --app gachamon-opencloud
 # 2. Secrets (no GitHub). Keep DRY_RUN=true until OC-13 gates pass.
 fly secrets set TZ=UTC DRY_RUN=true LIVE_SENDS_ENABLED=false --app gachamon-opencloud
 fly secrets set ROBLOX_API_KEY_SANDBOX=... MESSAGE_ID_SANDBOX=... --app gachamon-opencloud
-# Live secrets can wait
+# Live notify + snapshot keys when those jobs are armed
+# fly secrets set ROBLOX_API_KEY_LIVE_SNAPSHOT=... --app gachamon-opencloud
 
 # 3. Deploy image (Dockerfile CMD = node dist/index.js)
 fly deploy --app gachamon-opencloud
@@ -201,6 +203,8 @@ Rollback: `fly secrets set DRY_RUN=true` or `fly machine stop`. Does **not** cha
 fly ssh console --app gachamon-opencloud -C "sqlite3 /data/sandbox.sqlite \"SELECT slot_key, user_id, status, http_status, datetime(sent_unix, 'unixepoch') FROM sends ORDER BY created_unix DESC LIMIT 20;\""
 
 fly ssh console --app gachamon-opencloud -C "sqlite3 /data/sandbox.sqlite \"SELECT * FROM moment_days;\""
+
+fly ssh console --app gachamon-opencloud -C "sqlite3 /data/live.sqlite \"SELECT utc_date, new_snapshot_taken, latest_snapshot_time, source, datetime(taken_unix, 'unixepoch') FROM snapshots ORDER BY utc_date DESC LIMIT 20;\""
 ```
 
 Backup: Fly volume snapshot before migrations. Optional `sqlite3 /data/sandbox.sqlite '.backup /data/sandbox.bak'`.
@@ -328,6 +332,10 @@ PR-5 only **commits** team userIds. Flipping `DRY_RUN=false` is this ops step, n
 | Sandbox users get Live universe | Job mixup | Stop immediately. Rotate **both** keys |
 | Live blast scare | `LIVE_SENDS_ENABLED` + non-empty list | `LIVE_SENDS_ENABLED=false` / `DRY_RUN=true`. Roblox 1/day limits damage |
 | Key 403 from Fly, works on laptop | Roblox key IP-allowlisted | Remove IP allowlist or pin dedicated egress |
+| Snapshots tab: Live snapshot key missing | `ROBLOX_API_KEY_LIVE_SNAPSHOT` unset / placeholder | Put the `universe-datastores.control:snapshot` key in `.env`, restart |
+| Snapshot 403 | Notifications key used, or wrong universe | Separate snapshot env var; Live universe `6674250544` only |
+| No snapshot row for yesterday UTC | Process down all day, or 429 never recovered | Laptop must be up some time that UTC day; 429 retries next tick |
+| Snapshot during 16:00 notify window | Scheduled job waits on purpose | Expected; next tick after the 60s window POSTs |
 
 Missed window ⇒ **skip**. There is no catch-up send. Next chance is the next **notify** slot (and only if that user has not already used the UTC-day cap).
 
@@ -341,3 +349,4 @@ Missed window ⇒ **skip**. There is no catch-up send. Next chance is the next *
 | TCG | https://github.com/rfurno/roblox_gacha (private) |
 | Live game | https://www.roblox.com/games/98219898516303/Gachamon-TCG |
 | Open Cloud notify docs | https://create.roblox.com/docs/cloud/guides/experience-notifications |
+| Open Cloud snapshot | https://create.roblox.com/docs/cloud/reference/DataStore#Cloud_SnapshotDataStores |

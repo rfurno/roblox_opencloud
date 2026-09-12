@@ -51,6 +51,14 @@ function renderFlags(data) {
       data.messageConfigured.sandbox ? "on" : "warn",
     ),
     chip(
+      data.keysConfigured.live ? "Live key set" : "Live key missing",
+      data.keysConfigured.live ? "on" : "warn",
+    ),
+    chip(
+      data.messageConfigured.live ? "Live message_id set" : "Live message_id missing",
+      data.messageConfigured.live ? "on" : "warn",
+    ),
+    chip(
       data.snapshotKeysConfigured.live ? "Live snapshot key set" : "Live snapshot key missing",
       data.snapshotKeysConfigured.live ? "on" : "warn",
     ),
@@ -88,6 +96,21 @@ function renderJob(name, job, data) {
     hint.textContent = ready
       ? "Ignores DRY_RUN and the 8-minute window. Does not spawn The Collector. Uses this UTC day’s one MOMENT (Roblox limit)."
       : sendBtn.title;
+    card.append(hint);
+  }
+
+  if (name === "Live") {
+    const hint = document.createElement("p");
+    hint.className = "hint";
+    const keyOk = data.keysConfigured.live;
+    const msgOk = data.messageConfigured.live;
+    const parts = [
+      keyOk ? "Notify key set" : "Notify key missing",
+      msgOk ? "message_id set" : "message_id missing",
+      data.liveSendsEnabled ? "LIVE_SENDS_ENABLED" : "Live HTTP gated off",
+    ];
+    hint.textContent = parts.join(" · ");
+    if (!keyOk || !msgOk) hint.classList.add("warn-text");
     card.append(hint);
   }
 

@@ -1,6 +1,6 @@
-# roblox_opencloud — Backlog
+# Gachamon OpenCloud Controller — Backlog
 
-**Status (2026-09-10):** Local scheduler + dashboard in tree. HTTP dry-run by default. Spec: `roblox_gacha/docs/COLLECTOR_OPEN_CLOUD_NOTIFICATIONS.md`.
+**Status (2026-09-12):** Local scheduler + dashboard (Collector + Snapshots). MOMENT HTTP dry-run by default. Daily Live snapshot implemented (OC-18). Spec: `roblox_gacha/docs/COLLECTOR_OPEN_CLOUD_NOTIFICATIONS.md`.
 
 Priority: **P0** clock/safety, **P1** Sandbox send, **P2** Live / audience / polish.
 
@@ -24,7 +24,7 @@ IDs in this repo: `OC-*`. TCG follow-ups (other repo): `TCG-OC-*` with status **
 | OC-08 | P1 | Live gate | `LIVE_SENDS_ENABLED=false` default. Live job no-ops HTTP unless flag true **and** Live allowlist non-empty. |
 | OC-09 | P1 | Open Cloud client | POST MOMENT; `source.universe` matches job; `launch_data=collector:<slotKey>`; `analytics_data.category=collector_incoming`. Sequential. Universe isolation test. Shared 16:00 window: sandbox first. |
 | OC-10 | P1 | Dry-run worker | `npm run tick -- --dry-run` logs window + audience. **No HTTP, no `sends` / `moment_days` writes.** Dry-run then live tick still POSTs. No API keys required. Default locally. **Done.** |
-| OC-10b | P1 | Local dashboard | `npm start` opens `http://127.0.0.1:3848`, 30s scheduler, Tick-now is dry-run, bind loopback only. Laptop must stay awake. **Done.** |
+| OC-10b | P1 | Local dashboard | `npm start` opens `http://127.0.0.1:3848`, 30s scheduler, Tick-now is dry-run, bind loopback only. Laptop must stay awake. Collector + Snapshots tabs. **Done.** |
 | OC-11 | P2 | Fly always-on | Later. Not required for Sandbox allowlist sends from this machine. |
 | OC-12 | P1 | CI | GitHub Actions `npm test` only (PR-1). 5-minute schedule floor is why this is not the cron. **No** `ROBLOX_API_KEY_*` in GitHub. TZ matrix from OC-02. |
 | OC-13 | P1 | First Sandbox allowlist send | **Gates (all required):** (1) TCG-OC-01 Sandbox dashboard string + API key in local `.env`; (2) Sandbox experience **≥100 visits**; (3) allowlisted user is 13+ and Notify-bell opted in; (4) clock golden still **433** for `2026-09-10T16`; (5) `DRY_RUN=false` armed **only** for that UTC day/hour for a user with no MOMENT that UTC day; (6) `npm start` running, laptop awake. Curl remains the Stage-2 off-clock probe. Re-run does not duplicate. |
@@ -32,7 +32,7 @@ IDs in this repo: `OC-*`. TCG follow-ups (other repo): `TCG-OC-*` with status **
 | OC-15 | P2 | DataStore audience | Read TCG store via Open Cloud when it exists. 14-day recency. Fallback to allowlist if missing. Time-budget sandbox or split processes (shared 16:00 window). **Blocked on TCG-OC-02.** |
 | OC-16 | P2 | `{localTime}` parameter | Optional dashboard param from per-user IANA zone. Display only. Missing zone → relative sentence. |
 | OC-17 | P2 | Tick metrics | Stdout JSON tick logs (no `tick_log` table). Alert on 400, unexpected skip, and stopped Machine. |
-| OC-18 | P1 | Daily DataStore snapshot | Live `universe-datastores.control:snapshot` key in `ROBLOX_API_KEY_LIVE_SNAPSHOT`. One POST per UTC day; skip Collector send window; ledger in `live.sqlite`; dashboard Snapshots tab. Independent of `DRY_RUN`. |
+| OC-18 | P1 | Daily DataStore snapshot | Live `universe-datastores.control:snapshot` key in `ROBLOX_API_KEY_LIVE_SNAPSHOT`. One POST per UTC day; skip Collector send window; ledger in `live.sqlite`; dashboard Snapshots tab. Independent of `DRY_RUN`. **Done** (ops: put the key in `.env` and restart). |
 
 ---
 
@@ -44,6 +44,7 @@ Independently reviewable. Details also in the design doc PR Plan.
 | --- | --- | --- |
 | PR-0 | Docs | OC-00 |
 | PR-1 | Clock + local scheduler + dashboard + tests | OC-01–OC-10b |
+| PR-1b | Daily Live DataStore snapshot + Snapshots tab | OC-18 |
 | PR-2 | First Sandbox allowlist ids; HTTP enable is **ops** (`DRY_RUN=false` in local `.env`) | OC-13 |
 | PR-3 | Gated Live allowlist ids | OC-14 |
 | PR-4 | Fly always-on (later) | OC-11 |
