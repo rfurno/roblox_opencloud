@@ -1,6 +1,6 @@
 # Gachamon OpenCloud Controller — Product
 
-**Status:** Draft, 2026-09-13. Local scheduler + dashboard implemented (`npm start`). MOMENT HTTP still dry-run by default. Daily Live DataStore snapshot is independent of `DRY_RUN`. v1 send lead is **8 min** (`pushLeadSeconds` 480); **OC-19** moves that to **10 min**. v1 audience is an allowlist; **OC-15** is 14-day lot alumni via TCG `CollectorNotify`. Spec: `roblox_gacha/docs/COLLECTOR_OPEN_CLOUD_NOTIFICATIONS.md`.
+**Status:** Draft, 2026-09-15. Local scheduler + dashboard (`npm start`, one process). Send lead **10 min**. Daily Live snapshot independent of `DRY_RUN`. **OC-15 shipped:** 14-day lot alumni via TCG `CollectorNotify`; dashboard shows who will be notified. TCG store **published** sandbox + live. Spec: `roblox_gacha/docs/COLLECTOR_OPEN_CLOUD_NOTIFICATIONS.md`.
 
 **Places** (same ids as TCG)
 
@@ -15,7 +15,7 @@ Live and Sandbox are **different universes**. Sandbox sends must never use the L
 
 ## Pitch
 
-The Collector visits shops on a **wall clock**, not “N minutes after you join.” If you are in a server 2 minutes before arrival, TCG already toasts you. If you are offline, you miss the visit and there is **no catch-up**. This service pings opted-in **lot alumni** (anyone who has ever claimed a lot, current or former, active in the last 14 days) so they can join in time. v1 send is ~8 minutes before `slotUnix`; **OC-19** moves that to **10 minutes**.
+The Collector visits shops on a **wall clock**, not “N minutes after you join.” If you are in a server 2 minutes before arrival, TCG already toasts you. If you are offline, you miss the visit and there is **no catch-up**. This service pings opted-in **lot alumni** (anyone who has ever claimed a lot, current or former, active in the last 14 days) so they can join in time. Send is ~**10 minutes** before `slotUnix`.
 
 It is a Roblox **experience notification** (`MOMENT`) via Open Cloud — not SMS, email, or Discord. Creators cannot use those channels.
 
@@ -31,7 +31,7 @@ The same process also takes **one Live DataStore snapshot per UTC day**. That is
 
 ## Job to be done
 
-**When** The Collector’s next UTC slot is 10 minutes away (v1: 8 minutes until OC-19), **I want** a Notification Center item that deep-links into Gachamon, **so I can** be in my shop for the 10-minute catch window.
+**When** The Collector’s next UTC slot is 10 minutes away, **I want** a Notification Center item that deep-links into Gachamon, **so I can** be in my shop for the 10-minute catch window.
 
 Joining after the catch window still gets **no spawn**. That is game-owned (`SpecialNpcDirector.tickPlayer`) and correct. The notification is a reminder, not a spawn trigger.
 
@@ -42,8 +42,7 @@ Creator Dashboard notification string (manual, per universe; no Open Cloud API t
 | Field | Value |
 | --- | --- |
 | Title | `The Collector` |
-| Body (v1, shipped string) | `The Collector is on the way to your shop. Be there in about 8 minutes.` |
-| Body (OC-19) | `The Collector is on the way to your shop. Be there in about 10 minutes.` — edit the Dashboard string (or new `message_id`) **before** enabling 600s lead |
+| Body | `The Collector is on the way to your shop. Be there in about 10 minutes.` |
 
 Relative time only. Do not put `16:07 UTC` or the server’s local clock in the string. Optional later: dashboard parameter `{localTime}` formatted in the **recipient’s** IANA zone — display only, never changes `slotUnix`.
 
@@ -56,7 +55,7 @@ v1 is an allowlist of tens of userIds, not CCU. Metrics are operational, not van
 | Signal | Target |
 | --- | --- |
 | Clock match | Controller `slotUnix` equals TCG server/Studio log for the same `slotKey` (golden: `2026-09-10T16` → `1789056433`) |
-| Send time | v1: `[slotUnix − 480, slotUnix − 480 + 60)`. OC-19: `[slotUnix − 600, slotUnix − 600 + 60)`. Not N minutes after join |
+| Send time | `[slotUnix − 600, slotUnix − 600 + 60)`. Not N minutes after join |
 | Offline delivery | Opted-in alumni (v1: allowlisted user) sees the item in Notification Center (OS push is **not** guaranteed) |
 | No late send | If the 60s window is missed, skip. No toast-window or post-spawn MOMENT |
 | Idempotency | Re-running the job does not double-send; unique `(universe, slot, user)` |
@@ -97,7 +96,7 @@ DataStore snapshots (separate key; do not weaken):
 | 3 Local Sandbox send | `config/allowlist.sandbox.json`. Gates: dashboard string + Sandbox key + ≥100 visits + opted-in user + `DRY_RUN=false` **armed only for that UTC day/hour** + laptop awake + clock golden 433 | yes |
 | 4 Gated Live (local) | tiny `allowlist.live.json` + `LIVE_SENDS_ENABLED=true` | yes, not CCU |
 | 5 Fly always-on | same jobs, machine not a laptop | later |
-| 6 DataStore audience | TCG `CollectorNotify` lot alumni, 14-day recency, re-add on join | yes — **blocked on TCG-OC-02 + TCG-OC-08** |
+| 6 DataStore audience | TCG `CollectorNotify` lot alumni, 14-day recency, re-add on join | **yes — OC-15 done.** Keys set. Dashboard shows notify N / EverOwnedLot. First Live HTTP: 16:00 UTC window. |
 
 Rollback is “Ctrl-C / set `DRY_RUN=true`.” TCG spawn is unaffected. The laptop sleeping through a 60s window is a missed send.
 

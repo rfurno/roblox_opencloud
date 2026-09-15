@@ -31,6 +31,7 @@ export type AppConfig = {
   logUserResults: boolean;
   apiKey: Record<UniverseName, string>;
   snapshotApiKey: Record<UniverseName, string>;
+  datastoreApiKey: Record<UniverseName, string>;
   messageId: Record<UniverseName, string>;
 };
 
@@ -97,6 +98,10 @@ export function loadConfig(): AppConfig {
     snapshotApiKey: {
       sandbox: process.env.ROBLOX_API_KEY_SANDBOX_SNAPSHOT || "",
       live: process.env.ROBLOX_API_KEY_LIVE_SNAPSHOT || "",
+    },
+    datastoreApiKey: {
+      sandbox: process.env.ROBLOX_API_KEY_SANDBOX_DATASTORE || "",
+      live: process.env.ROBLOX_API_KEY_LIVE_DATASTORE || "",
     },
     messageId: {
       sandbox: process.env.MESSAGE_ID_SANDBOX || "",

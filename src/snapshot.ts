@@ -19,7 +19,7 @@ import {
   type SnapshotApiResult,
 } from "./roblox.ts";
 import type { Ledger, SnapshotRow, SnapshotSource } from "./store.ts";
-import { getLedger } from "./worker.ts";
+import { getLedger } from "./store.ts";
 
 export type SnapshotFn = (args: {
   universeId: string;

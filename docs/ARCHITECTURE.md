@@ -1,6 +1,6 @@
 # Gachamon OpenCloud Controller — Architecture
 
-**Status:** Draft, 2026-09-13. **v1 host is this laptop** (`npm start` + localhost dashboard, Collector + Snapshots tabs). Fly remains a later always-on option. Numbers must match [PRODUCT.md](PRODUCT.md) and [OPERATIONS.md](OPERATIONS.md). **OC-19** (not shipped): `pushLeadSeconds` 600. **OC-15** (not shipped): lot-alumni DataStore audience.
+**Status:** Draft, 2026-09-15. **v1 host is this laptop** (`npm start` + localhost dashboard, Collector + Snapshots tabs). **One process** (port 3848). Fly remains a later always-on option. Numbers must match [PRODUCT.md](PRODUCT.md) and [OPERATIONS.md](OPERATIONS.md). **OC-19 shipped:** `pushLeadSeconds` 600. **OC-15 shipped:** lot-alumni DataStore audience (`CollectorNotify`, 14-day recency, 15 min cache, dashboard notify count).
 
 Clock source of truth is TCG, not this repo:
 
@@ -26,7 +26,7 @@ If controller and game disagree on `slotUnix`, **fix the controller**.
 | Sandbox `hoursLocal` (visit / clock) | `[4, 10, 16, 22]` |
 | Sandbox `notifyHoursLocal` | `[4, 10, 16, 22]` — subset or arm one hour per test day |
 | `jitterSeconds` | `600` |
-| `pushLeadSeconds` | `480` (v1). **OC-19:** `600` |
+| `pushLeadSeconds` | `600` |
 | `sendWindowSeconds` | `60` |
 | `inGameToastLeadSeconds` | `120` (game only) |
 | `catchWindowSeconds` | `600` (game only) |
@@ -43,7 +43,7 @@ Committed `config/schedule.yaml` (intended):
 ```yaml
 scheduleTimeZone: "Etc/UTC"
 jitterSeconds: 600
-pushLeadSeconds: 480     # OC-19: 600
+pushLeadSeconds: 600
 sendWindowSeconds: 60
 tickIntervalSeconds: 30
 live:
@@ -75,7 +75,7 @@ npm start  (this laptop, TZ=UTC, 30s tick)
     ├─ audience.ts       v1 JSON allowlist
     ├─ store.ts          sqlite ./data/{sandbox,live}.sqlite
     ├─ snapshot.ts       1 Live DataStore snapshot / UTC day
-    └─ roblox.ts         POST notifications + data-stores:snapshot
+    └─ roblox.ts         POST notifications + data-stores:snapshot + CollectorNotify list/get
                               │
                               ▼
                      Roblox Notification Center
@@ -185,11 +185,11 @@ jitter = (h % (2 * span + 1)) - span    -- span = 600, inclusive [-600, +600]
 
 | key | hash32 (Luau) | jitter s | nominalUnix | slotUnix | slot UTC | pushAt UTC |
 | --- | ---: | ---: | ---: | ---: | --- | --- |
-| `2026-09-10T16` | 1396388120 | **433** | 1789056000 | 1789056433 | 16:07:13Z | 15:59:13Z (v1, −480s). OC-19: **15:57:13Z** (−600s) |
-| `2026-09-10T04` | 1379463408 | 213 | 1789012800 | 1789013013 | 04:03:33Z | 03:55:33Z |
-| `2026-09-10T10` | 1429943360 | −267 | 1789034400 | 1789034133 | 09:55:33Z | 09:47:33Z |
-| `2026-09-10T22` | 1480423312 | 454 | 1789077600 | 1789078054 | 22:07:34Z | 21:59:34Z |
-| `2026-09-11T04` | 680209728 | −41 | 1789099200 | 1789099159 | 03:59:19Z | 03:51:19Z |
+| `2026-09-10T16` | 1396388120 | **433** | 1789056000 | 1789056433 | 16:07:13Z | **15:57:13Z** (−600s) |
+| `2026-09-10T04` | 1379463408 | 213 | 1789012800 | 1789013013 | 04:03:33Z | 03:53:33Z |
+| `2026-09-10T10` | 1429943360 | −267 | 1789034400 | 1789034133 | 09:55:33Z | 09:45:33Z |
+| `2026-09-10T22` | 1480423312 | 454 | 1789077600 | 1789078054 | 22:07:34Z | 21:57:34Z |
+| `2026-09-11T04` | 680209728 | −41 | 1789099200 | 1789099159 | 03:59:19Z | 03:49:19Z |
 
 Textbook uint32 FNV for `2026-09-10T16` is hash `1898790244`, jitter **237**. That would miss TCG spawn by **196s**. **Do not use `Math.imul`.**
 
@@ -224,8 +224,8 @@ hash32      = 1396388120
 jitter      = (1396388120 % 1201) - 600 = +433
 nominalUnix = 1789056000          // 2026-09-10 16:00:00Z
 slotUnix    = 1789056433          // 2026-09-10 16:07:13Z  TCG spawn
-pushAt      = 1789055953          // 2026-09-10 15:59:13Z  Open Cloud
-send window = [1789055953, 1789056013)   // 15:59:13–16:00:13Z
+pushAt      = 1789055833          // 2026-09-10 15:57:13Z  Open Cloud
+send window = [1789055833, 1789055893)   // 15:57:13–15:58:13Z
 toastAt     = 1789056313          // 16:05:13Z  game only
 catchEnd    = 1789057033          // 16:17:13Z  game only
 ```
@@ -236,7 +236,7 @@ catchEnd    = 1789057033          // 16:17:13Z  game only
 
 Scheduled snapshots **skip** while any Collector **notify** slot is in its 60s send window, then retry next tick. Manual dashboard snapshot does not wait. Snapshots do **not** honor `DRY_RUN` (that flag is MOMENT-only).
 
-A slot is eligible to **send** iff the **`hoursLocal` hour used to build that slot** is in `notifyHoursLocal` **and** `now ∈ [slotUnix - pushLead, slotUnix - pushLead + 60)`. v1 `pushLead` = 480; **OC-19** = 600. `notifyHoursLocal` ⊆ `hoursLocal` in the **same** IANA zone — not a second UTC conversion, not `slotKey`’s UTC hour unless the zone is `Etc/UTC`. Visit hours still compute every TCG slot. If `pushAt` is past, **skip**. Do not send in the toast window or after spawn.
+A slot is eligible to **send** iff the **`hoursLocal` hour used to build that slot** is in `notifyHoursLocal` **and** `now ∈ [slotUnix - pushLead, slotUnix - pushLead + 60)`. `pushLead` = **600**. `notifyHoursLocal` ⊆ `hoursLocal` in the **same** IANA zone — not a second UTC conversion, not `slotKey`’s UTC hour unless the zone is `Etc/UTC`. Visit hours still compute every TCG slot. If `pushAt` is past, **skip**. Do not send in the toast window or after spawn.
 
 **Live `Etc/UTC` `notifyHoursLocal: [16]`** so the 1/day cap is not spent on 04:00 UTC (01:00 Brazil). TCG still spawns at 04. Brazil equivalent: `America/Sao_Paulo`, `hoursLocal: [13, 1]`, **`notifyHoursLocal: [13]`** → send only 16:00Z. Keeping `[16]` in that zone matches no generating hour → zero Live MOMENTs. Golden: after a 04:00 send, 16:00 is skipped; with notify `[16]` under `Etc/UTC`, 04:00 is computed but not sent; Sao Paulo `[13, 1]` + notify `[13]` → send only 16:00Z.
 
@@ -283,7 +283,7 @@ src/
   clock.ts          hash32, jitterFor, clockSlotsNear, inSendWindow
   roblox.ts         MOMENT + DataStore snapshot client
   store.ts          node:sqlite ledger (sends, moment_days, snapshots)
-  audience.ts       allowlist JSON
+  audience.ts       allowlist JSON + CollectorNotify alumni cache
   worker.ts         one tick (INSERT OR IGNORE → SELECT → POST)
   snapshot.ts       daily DataStore snapshot (1/UTC day, skip send window)
   config.ts         schedule.json + .env
@@ -382,16 +382,16 @@ Docs: [Snapshot Data Stores](https://create.roblox.com/docs/cloud/reference/Data
 
 ## Audience
 
-TCG does **not** export lot alumni today. There is no `CollectorNotify` DataStore in `roblox_gacha` (spec-only). Do not invent recipients. Do not blast Notify-bell CCU.
+Do not invent recipients. Do not blast Notify-bell CCU.
 
 | Stage | Source |
 | --- | --- |
-| v1 | `config/allowlist.sandbox.json` `{ "userIds": [...] }`. Live file `[]`. `LIVE_SENDS_ENABLED=false` |
-| v2 (OC-15) | Open Cloud list of DataStore **`CollectorNotify`** **in that universe**. Key = `userId` string (**not** `lotId` — lots are reused; MOMENT is per user). Value includes `updatedUnix`. Keep ids with `updatedUnix` in the last **14 days**. Dormant alumni who join again are re-touched by TCG and re-enter the window. **Blocked on TCG-OC-02 + TCG-OC-08.** |
+| v1 | `config/allowlist.*.json` `{ "userIds": [...] }`. Used when the datastore key is unset, the store 404s, or no alumni cache exists yet |
+| v2 (OC-15) | Open Cloud list of DataStore **`CollectorNotify`** **in that universe**. Key = `userId` string (**not** `lotId`). Value includes `updatedUnix`. Keep ids with `updatedUnix` in the last **14 days**. Open Cloud list `id` is `global/<userId>` (not a bare digit string). Refresh every 15 min (not inside the 60s window). Cache in sqlite `audience_cache`. Dashboard shows **Will notify N · EverOwnedLot M**. Empty datastore audience ⇒ no HTTP (does **not** fall back). Missing store / 4xx except retryable ⇒ allowlist fallback. No historical backfill of pre-ship owners. |
 
 v1 does not check claimed-lot itself. Operators put ids on the list on purpose.
 
-v2 list/filter happens **outside** the 60s send window (cache userIds). Fallback to allowlist if the store is missing. Empty audience ⇒ no HTTP. New key `ROBLOX_API_KEY_*_DATASTORE` (`objects:list` / `objects:read`); never reuse the notifications or snapshot key. Shared 16:00: time-budget sandbox or split processes if Live alumni POSTs would miss the window.
+List/filter happens **outside** the 60s send window. Key `ROBLOX_API_KEY_*_DATASTORE` (`objects:list` / `objects:read`); never reuse the notifications or snapshot key. Shared 16:00: sequential POSTs; time-budget sandbox or split processes if Live alumni would miss the window.
 
 Released owners stay eligible for 14 days after TCG bumps `updatedUnix` on release. Current offline owners are included. `lotId` in the value is optional debug — not used to send.
 
@@ -422,6 +422,15 @@ CREATE TABLE moment_days (
   utc_date     TEXT NOT NULL,      -- YYYY-MM-DD of send, UTC
   slot_key     TEXT NOT NULL,
   PRIMARY KEY (universe_id, user_id, utc_date)
+);
+
+CREATE TABLE audience_cache (
+  universe_id        TEXT PRIMARY KEY,
+  refreshed_unix     INTEGER NOT NULL,
+  source             TEXT NOT NULL,      -- datastore | allowlist
+  store_listed_n     INTEGER NOT NULL,
+  recency_dropped_n  INTEGER NOT NULL,
+  user_ids           TEXT NOT NULL       -- JSON number array
 );
 
 CREATE TABLE snapshots (
@@ -539,7 +548,8 @@ How to verify a slot against TCG: [OPERATIONS.md](OPERATIONS.md).
 | Shared 16:00 window | Med | v1 sequential; v2 time-budget or split |
 | 1/day cap on 04:00 UTC | High if unfixed | Live `notifyHoursLocal: [16]` |
 | Nobody opted in (403) | Med | Expected until TCG `PromptOptIn` (What's New expires 2026-10-10; need TCG-OC-03b on claim) |
-| DataStore list inside 60s window | High if unfixed | OC-15: refresh audience before `pushAt`; window is POST only |
+| DataStore list inside 60s window | High if unfixed | OC-15: 15 min cache; skip list in the 60s window; window is POST only |
+| Second `npm start` | Low | `EADDRINUSE` on 3848; run one process |
 | `CollectorNotify` keyed by lotId | High | Key is `userId`. Lots are reused; former owners would be overwritten |
 | TCG changes hours without this repo | Med | Hours in YAML; compare to `NPCConfig.lua` |
 | Missed UTC-day snapshot (laptop asleep all day) | Med | Same host as MOMENT; dashboard Snapshots tab; retry next tick if 429 |

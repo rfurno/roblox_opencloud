@@ -1,7 +1,7 @@
 {
   "scheduleTimeZone": "Etc/UTC",
   "jitterSeconds": 600,
-  "pushLeadSeconds": 480,
+  "pushLeadSeconds": 600,
   "sendWindowSeconds": 60,
   "tickIntervalSeconds": 30,
   "sandbox": {

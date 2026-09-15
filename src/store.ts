@@ -17,6 +17,17 @@ export type SendRow = {
   created_unix: number;
 };
 
+export type AudienceSource = "datastore" | "allowlist";
+
+export type AudienceCache = {
+  universeId: string;
+  refreshedUnix: number;
+  source: AudienceSource;
+  storeListedN: number;
+  recencyDroppedN: number;
+  userIds: number[];
+};
+
 export type SnapshotSource = "scheduled" | "manual";
 
 export type SnapshotRow = {
@@ -51,6 +62,15 @@ CREATE TABLE IF NOT EXISTS moment_days (
   utc_date     TEXT NOT NULL,
   slot_key     TEXT NOT NULL,
   PRIMARY KEY (universe_id, user_id, utc_date)
+);
+
+CREATE TABLE IF NOT EXISTS audience_cache (
+  universe_id        TEXT NOT NULL PRIMARY KEY,
+  refreshed_unix     INTEGER NOT NULL,
+  source             TEXT NOT NULL,
+  store_listed_n     INTEGER NOT NULL,
+  recency_dropped_n  INTEGER NOT NULL,
+  user_ids           TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS snapshots (
@@ -220,6 +240,66 @@ export class Ledger {
       .all(limit) as SnapshotRow[];
   }
 
+  getAudienceCache(universeId: string): AudienceCache | null {
+    const row = this.db
+      .prepare(
+        `SELECT universe_id, refreshed_unix, source, store_listed_n, recency_dropped_n, user_ids
+           FROM audience_cache
+          WHERE universe_id = ?`,
+      )
+      .get(universeId) as
+      | {
+          universe_id: string;
+          refreshed_unix: number;
+          source: string;
+          store_listed_n: number;
+          recency_dropped_n: number;
+          user_ids: string;
+        }
+      | undefined;
+    if (!row) return null;
+    let userIds: number[] = [];
+    try {
+      const parsed = JSON.parse(row.user_ids) as unknown;
+      if (Array.isArray(parsed)) {
+        userIds = parsed.filter((n) => Number.isInteger(n) && n > 0) as number[];
+      }
+    } catch {
+      userIds = [];
+    }
+    return {
+      universeId: row.universe_id,
+      refreshedUnix: row.refreshed_unix,
+      source: row.source === "datastore" ? "datastore" : "allowlist",
+      storeListedN: row.store_listed_n,
+      recencyDroppedN: row.recency_dropped_n,
+      userIds,
+    };
+  }
+
+  putAudienceCache(row: AudienceCache): void {
+    this.db
+      .prepare(
+        `INSERT INTO audience_cache
+          (universe_id, refreshed_unix, source, store_listed_n, recency_dropped_n, user_ids)
+         VALUES (?, ?, ?, ?, ?, ?)
+         ON CONFLICT(universe_id) DO UPDATE SET
+           refreshed_unix = excluded.refreshed_unix,
+           source = excluded.source,
+           store_listed_n = excluded.store_listed_n,
+           recency_dropped_n = excluded.recency_dropped_n,
+           user_ids = excluded.user_ids`,
+      )
+      .run(
+        row.universeId,
+        row.refreshedUnix,
+        row.source,
+        row.storeListedN,
+        row.recencyDroppedN,
+        JSON.stringify(row.userIds),
+      );
+  }
+
   recentSends(limit = 20): SendRow[] {
     return this.db
       .prepare(
@@ -235,4 +315,21 @@ export class Ledger {
 
 export function ledgerPath(dataDir: string, universe: string): string {
   return resolve(dataDir, `${universe}.sqlite`);
+}
+
+const defaultLedgers = new Map<string, Ledger>();
+
+export function getLedger(
+  cfg: { dataDir: string },
+  name: string,
+  injected?: Ledger,
+): Ledger {
+  if (injected) return injected;
+  const path = ledgerPath(cfg.dataDir, name);
+  let existing = defaultLedgers.get(path);
+  if (!existing) {
+    existing = new Ledger(path);
+    defaultLedgers.set(path, existing);
+  }
+  return existing;
 }

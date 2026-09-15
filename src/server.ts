@@ -5,6 +5,7 @@ import { extname, join, normalize, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { msUntilNextBoundary } from "./clock.ts";
 import type { AppConfig, UniverseName } from "./config.ts";
+import { tickAudience } from "./audience.ts";
 import { takeSnapshotNow, tickSnapshots } from "./snapshot.ts";
 import { buildStatus } from "./status.ts";
 import { sendSandboxNow, tick } from "./worker.ts";
@@ -45,8 +46,15 @@ function enqueueManualSnapshot(cfg: AppConfig, name: UniverseName) {
   return next;
 }
 
+export function enqueueAudience(cfg: AppConfig): Promise<void> {
+  const run = () => tickAudience(cfg).then(() => undefined);
+  tickChain = tickChain.then(run, run);
+  return tickChain;
+}
+
 async function schedulerLoop(cfg: AppConfig): Promise<void> {
   while (running) {
+    await enqueueAudience(cfg);
     await enqueueTick(cfg);
     await enqueueSnapshots(cfg);
     const wait = msUntilNextBoundary(Date.now(), cfg.schedule.tickIntervalSeconds);

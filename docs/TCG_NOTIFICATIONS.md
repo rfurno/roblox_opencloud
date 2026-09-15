@@ -2,7 +2,7 @@
 
 **Audience:** TCG (`rfurno/roblox_gacha`). This is the game-side contract the Open Cloud controller (`roblox_opencloud`) needs.
 
-**Status:** 2026-09-15. Controller already computes slots and can POST `MOMENT` to an allowlist. Live alumni blast is **blocked** on TCG-OC-08 + 02 + 03b. v1 send lead is **8 min**; both repos move to **10 min** together (Dashboard copy + controller `pushLeadSeconds` + TCG `PushLeadSeconds`). Reviewed against TCG `src/` — implement with the corrections in each ticket (monotonic `UpdateAsync`, no historical backfill).
+**Status:** 2026-09-15. Controller lists `CollectorNotify` every 15 min (Open Cloud list id `global/<userId>`), caches 14-day alumni, dashboard **Will notify N · EverOwnedLot M**. **OC-15 / OC-19 done.** TCG-OC-07, 09, 08, 02, 03b **published** sandbox + live. Send lead **10 min**. Leftover TCG is optional TCG-OC-04 / 05. First Live alumni MOMENT is the next 16:00 UTC window.
 
 **Controller spec (do not re-implement the sender here):** this repo’s [ARCHITECTURE.md](ARCHITECTURE.md) / [PRODUCT.md](PRODUCT.md) / [BACKLOG.md](BACKLOG.md). Game spec: `roblox_gacha/docs/COLLECTOR_OPEN_CLOUD_NOTIFICATIONS.md` (there is no `COLLECTOR_OPEN_CLOUD_NOTIFICATIONS.md` in this repo). Ticket IDs: `TCG-OC-*` (this list) and `OC-*` (controller).
 
@@ -18,8 +18,8 @@ The game still owns spawn. The notification is a reminder, not a spawn trigger.
 | Offline `MOMENT` HTTP | `roblox_opencloud` | POST `https://apis.roblox.com/cloud/v2/users/{userId}/notifications`. Not SMS / email / Discord / MessagingService. |
 | Notification string copy | Creator Dashboard (ops) | No Open Cloud API to create copy. Asset id goes in the controller `.env`, **not** TCG git. |
 | Who to ping (v1) | Controller allowlist | Sandbox first. Does not need TCG code. |
-| Who to ping (v2, Live alumni) | TCG `CollectorNotify` DataStore | **Does not exist today.** Blocks controller **OC-15**. |
-| Opt-in (Notify bell) | TCG client `PromptOptIn` | What's New card expires **2026-10-10**. Need a durable prompt on first claim. |
+| Who to ping (v2, Live alumni) | TCG `CollectorNotify` DataStore | **Published** sandbox + live 2026-09-15. **OC-15 done.** |
+| Opt-in (Notify bell) | TCG client `PromptOptIn` | What's New expires **2026-10-10**. First-claim prompt is in TCG git; `PropertyManager` `Instance.new`s `PromptNotificationOptIn` if missing. |
 | `launch_data` | Controller sends `collector:<slotKey>` | TCG currently **ignores** it. Spawn still uses the clock. |
 
 Places:
@@ -38,12 +38,12 @@ Not required to start Sandbox **allowlist** testing (controller + Dashboard stri
 
 | # | ID | P | Unblocks |
 | --- | --- | --- | --- |
-| 1 | [TCG-OC-01](#tcg-oc-01--creator-dashboard) | P1 | First Sandbox MOMENT (controller OC-13) |
+| 1 | [TCG-OC-01](#tcg-oc-01--creator-dashboard) | P1 | **Done.** First Sandbox MOMENT (controller OC-13) |
 | 2 | [TCG-OC-07](#tcg-oc-07--patch-spec-hash32-sentence) | P1 | Stop the next implementer shipping jitter 237 (doc-only) |
-| 3 | [TCG-OC-09](#tcg-oc-09--push-lead-8--10-min) | P1 | Pair with controller OC-19 **and** Dashboard body. Do this **before** enabling 10 min HTTP. |
-| 4 | [TCG-OC-08](#tcg-oc-08--profilestore-everownedlot) | P1 | Join re-touch after a post-ship claim |
-| 5 | [TCG-OC-02](#tcg-oc-02--collectornotify-datastore) | P1 | Controller OC-15 audience |
-| 6 | [TCG-OC-03b](#tcg-oc-03b--durable-promptoptin-on-first-claim) | P1 | Live alumni actually receive the MOMENT (else 403) |
+| 3 | [TCG-OC-09](#tcg-oc-09--push-lead-8--10-min) | P1 | **Done** with controller OC-19 + Dashboard body |
+| 4 | [TCG-OC-08](#tcg-oc-08--profilestore-everownedlot) | P1 | **Published** |
+| 5 | [TCG-OC-02](#tcg-oc-02--collectornotify-datastore) | P1 | **Published** — OC-15 lists it |
+| 6 | [TCG-OC-03b](#tcg-oc-03b--durable-promptoptin-on-first-claim) | P1 | **Published** |
 | 7 | [TCG-OC-04](#tcg-oc-04--launch_data-analytics-optional) | P2 | Optional analytics |
 | 8 | [TCG-OC-05](#tcg-oc-05--next-slot-hud-optional) | P2 | Optional shop HUD |
 
@@ -51,8 +51,14 @@ Already done, do not redo:
 
 | ID | Status |
 | --- | --- |
-| **TCG-OC-03** What's New `2026-09-10-01` | Shipped live. `PROMPT_NOTIFICATION_OPT_IN` → `ExperienceNotificationService:PromptOptIn()` in `AnnouncementClient.client.lua`. Card **expires 2026-10-10**. Not enough for Live alumni. |
+| **TCG-OC-01** Creator Dashboard | **Done.** Both universes; string “about 10 minutes”; `MESSAGE_ID_SANDBOX` / `MESSAGE_ID_LIVE` in `.env`. |
+| **TCG-OC-03** What's New `2026-09-10-01` | Shipped live. `PROMPT_NOTIFICATION_OPT_IN` → `ExperienceNotifyModule.PromptIfAllowed()` (session de-dupe with first-claim). Card **expires 2026-10-10**. Not enough for Live alumni. |
 | **TCG-OC-06** Do not “fix” `hash32` | Constraint, not a feature. Luau IEEE-754 multiply **is** the live clock (jitter **433** for `2026-09-10T16`). |
+| **TCG-OC-07** hash sentence | In TCG `docs/COLLECTOR_OPEN_CLOUD_NOTIFICATIONS.md` §2. |
+| **TCG-OC-09** `PushLeadSeconds = 10 * 60` | In TCG git. Controller OC-19 `pushLeadSeconds` 600. Dashboard body “about 10 minutes.” |
+| **TCG-OC-08** `EverOwnedLot` | In TCG git. Set after successful clone. Never cleared on release. |
+| **TCG-OC-02** `CollectorNotify` | **Published** sandbox + live 2026-09-15. Sandbox key `3757284903` = `{ updatedUnix = 1789496571, lotId = "1" }` after leave. Studio Play does not write. **OC-15 done.** |
+| **TCG-OC-03b** first-claim `PromptOptIn` | In TCG git (`ExperienceNotifyModule` + `AnnouncementClient`). Server `Instance.new`s `PromptNotificationOptIn` if missing. |
 
 ---
 
@@ -66,8 +72,7 @@ Manual, once per universe. No Lua.
    | Field | Value |
    | --- | --- |
    | Title | `The Collector` |
-   | Body (v1, 8 min) | `The Collector is on the way to your shop. Be there in about 8 minutes.` |
-   | Body (with TCG-OC-09 / OC-19) | `The Collector is on the way to your shop. Be there in about 10 minutes.` |
+   | Body | `The Collector is on the way to your shop. Be there in about 10 minutes.` |
 
    Relative time only. Do **not** put `16:07 UTC` or a server-local clock in the string.
 
@@ -75,7 +80,7 @@ Manual, once per universe. No Lua.
 4. Sandbox experience must have **≥100 visits** or MOMENT HTTP 403s (eligibility). Play-test until the counter clears 100.
 5. Recipients must be **13+** and have the experience **Notify** bell on.
 
-For the 10 min lead: edit the existing string **or** create a new one and swap `message_id` in the controller **before** `pushLeadSeconds` becomes 600. Copy that says “8 minutes” with a 10 min send is a product bug.
+**Done.** Experience notifications on; Collector string edited in place to “about 10 minutes”; `MESSAGE_ID_SANDBOX` and `MESSAGE_ID_LIVE` are in the controller `.env`. Controller `pushLeadSeconds` is 600 (OC-19).
 
 ---
 
@@ -83,19 +88,13 @@ For the 10 min lead: edit the existing string **or** create a new one and swap `
 
 **File:** `src/server/Config/NPCConfig.lua`
 
-Today:
-
-```lua
-PushLeadSeconds = 8 * 60,
-```
-
-Change to:
+**In TCG git:**
 
 ```lua
 PushLeadSeconds = 10 * 60,
 ```
 
-Also update copy in `docs/COLLECTOR_OPEN_CLOUD_NOTIFICATIONS.md` (8 → 10) so the spec matches.
+TCG spec copy is already 8 → 10. Controller + Dashboard are **not**.
 
 **Do not change** (controller follows TCG; desync = missed spawn or late ping):
 
@@ -118,17 +117,11 @@ Golden `2026-09-10T16` (must still hold after this change):
 | toast | `1789056313` (16:05:13Z) — game only |
 | spawn | `1789056433` |
 | catch end | `1789057033` (16:17:13Z) |
-| Open Cloud `pushAt` after this + OC-19 | `1789055833` (15:57:13Z) |
+| Open Cloud `pushAt` | `1789055833` (15:57:13Z) |
 
 `PushLeadSeconds` is **unused by TCG game Lua** today (`SpecialNpcDirector` never reads it). It is documentation for the controller. Changing TCG alone does not move spawn, toast, or catch.
 
-This is a **three-way cutover**. Merge TCG `10 * 60` early if you want, but do **not** enable controller HTTP at 600s while the Dashboard string still says “8 minutes.” Flip together:
-
-1. TCG `NPCConfig.COLLECTOR.PushLeadSeconds = 10 * 60` + spec copy 8 → 10
-2. Dashboard body “about 10 minutes” (or new string + swap `message_id`)
-3. Controller `pushLeadSeconds = 600` (OC-19)
-
-Copy that says “8 minutes” with a 10 min send is a product bug.
+**Shipped (three-way cutover):** TCG `10 * 60`, Dashboard body “about 10 minutes,” controller `pushLeadSeconds = 600`.
 
 ---
 
@@ -172,7 +165,7 @@ Missing key on old profiles: `Reconcile` fills `false`. Treat as `false` until f
 
 ## TCG-OC-02 — `CollectorNotify` DataStore
 
-**Does not exist today.** This is the Live audience. Blocks controller OC-15.
+**Published** sandbox + live (`src/server/CollectorNotifyStore.lua`). Sandbox play-confirmed. **OC-15 is done** in the controller.
 
 ### Store contract (exact — controller will list this)
 
@@ -219,42 +212,9 @@ Claim and release are rare explicit events — always upsert those (even in the 
 
 A failed DataStore write must **not** fail the claim/release/join. `pcall` + `warn`. The shop still works; that user may miss one MOMENT window.
 
-### Suggested module
+### Module (shipped in TCG git)
 
-New `src/server/CollectorNotifyStore.lua` (name flexible). `UpdateAsync` so two servers cannot clobber `updatedUnix` **downward**. Capture `os.time()` **inside** the transform and take `max(old, now)`. A `now` captured before `UpdateAsync` lets the later-finishing call win with an older timestamp. `pcall` + `warn` on failure — do not swallow the error.
-
-```lua
-local DataStoreService = game:GetService("DataStoreService")
-local RunService = game:GetService("RunService")
-
-local store = DataStoreService:GetDataStore("CollectorNotify")
-
-local function touch(userId, lotId)
-	if RunService:IsStudio() then
-		return
-	end
-	local key = tostring(userId)
-	local ok, err = pcall(function()
-		store:UpdateAsync(key, function(old)
-			local next = type(old) == "table" and old or {}
-			local prev = tonumber(next.updatedUnix)
-			local t = os.time()
-			if typeof(prev) ~= "number" or t > prev then
-				next.updatedUnix = t
-			end
-			if lotId ~= nil then
-				next.lotId = tostring(lotId)
-			end
-			return next
-		end)
-	end)
-	if not ok then
-		warn("CollectorNotify Touch failed userId=" .. key .. " err=" .. tostring(err))
-	end
-end
-
-return { Touch = touch }
-```
+`src/server/CollectorNotifyStore.lua`. `UpdateAsync` so two servers cannot clobber `updatedUnix` **downward**. Capture `os.time()` **inside** the transform and take `max(old, now)`. `pcall` + `warn` on failure. `Touch` no-ops in Studio Play and when `userId` is nil.
 
 Hook points (current line numbers as of 2026-09-14 — they will drift):
 
@@ -300,8 +260,8 @@ Rules:
 
 - **13+** only (`CanPromptOptInAsync` is false otherwise — do not special-case age in game code).
 - Do **not** block the claim if they dismiss or the API errors.
-- Fire **once per first claim**, not every join. `EverOwnedLot` going false → true is the trigger.
-- Claim is server-side (`PropertyManager` proximity prompt). Add an S→C `RemoteEvent` (e.g. `PromptNotificationOptIn`) under `ReplicatedStorage.Events` in **both Studio places** (Live and Sandbox). Remotes are place-owned, not Rojo. `FireClient` only when this session set `EverOwnedLot` for the first time. Reuse the same `pcall` pattern as `AnnouncementClient`.
+- Fire **once**. Same session as FTUE complete (`Tutorial == "Completed"`), or after What's New if FTUE was already done and `NotifyOptInPrompted` is still false. Do **not** prompt every join. First claim is not the trigger.
+- `PromptNotificationOptIn` RemoteEvent + `ShouldPromptNotificationOptIn` RemoteFunction are `Instance.new`d if missing. Reuse `ExperienceNotifyModule.PromptIfAllowed` (`CanPromptOptInAsync` + session de-dupe; waits out loading / announcements).
 - Skip Studio Play if you skip `CollectorNotify` writes (same `IsStudio()` gate), or leave it on for local opt-in testing — either is fine; MOMENT still will not send to `studio:` slots.
 - **Double prompt:** What's New `2026-09-10-01` still calls `PromptOptIn` until **2026-10-10**. First-time players can hit both in one session (What's New on join, then first claim). Same `pcall` pattern is fine; prefer one prompt per session if both would run. Do not block claim.
 
@@ -313,17 +273,9 @@ Until this ships, operators opt in from the experience page Notify bell.
 
 **File:** `docs/COLLECTOR_OPEN_CLOUD_NOTIFICATIONS.md` §2
 
-Today it says:
+**Done in TCG git.** §2 now says IEEE-754 double then `% 2^32`, golden `2026-09-10T16` → hash `1396388120`, jitter **433**.
 
-> `xor` is 32-bit. Multiplication is mod 2^32.
-
-That reads as uint32 wrap (`Math.imul` / Python `int`). That path hashes `2026-09-10T16` to jitter **237** and misses TCG spawn by **196s**.
-
-Replace with:
-
-> `xor` is 32-bit (`bit32.bxor`). Multiplication is **IEEE-754 double**, then `% 2^32` (Luau `(h * 16777619) % 4294967296`). It is **not** uint32 wrap / `Math.imul`. Golden: `2026-09-10T16` → hash `1396388120`, jitter **433**.
-
-Do **not** change `SpecialNpcDirector.hash32` to match the old sentence.
+The old “Multiplication is mod 2^32” sentence read as uint32 wrap (`Math.imul` / Python `int`) and hashes that slot to jitter **237** (misses TCG spawn by **196s**). Do **not** change `SpecialNpcDirector.hash32` to match the old sentence.
 
 ---
 
@@ -423,18 +375,19 @@ Controller-side checks after this lands (not TCG): Sandbox allowlist MOMENT in N
 
 | File | Change |
 | --- | --- |
-| Creator Dashboard (both universes) | TCG-OC-01 |
-| `src/server/Config/NPCConfig.lua` | `PushLeadSeconds = 10 * 60` |
-| `src/server/Data/Template.lua` | `EverOwnedLot = false` |
-| `src/server/Data/PlayerDataManager.lua` | get/set `EverOwnedLot` |
-| `src/server/CollectorNotifyStore.lua` | **new** — standard DataStore upsert |
-| `src/server/PropertyManager.server.lua` | claim + release hooks |
-| `src/server/Data/PlayerDataInit.server.lua` | join re-touch in `Initialize` (once per profile session; no extra flag if that is the only join hook) |
-| Studio place `ReplicatedStorage.Events` (Live **and** Sandbox) | new S→C `RemoteEvent` for first-claim `PromptOptIn` |
-| Client (new remote handler or `AnnouncementClient` helper) | `CanPromptOptInAsync` + `PromptOptIn` on first claim |
-| `docs/COLLECTOR_OPEN_CLOUD_NOTIFICATIONS.md` | 8→10 min; hash sentence; replace the short “TCG follow-ups” stub with this contract |
-| Optional: join handler + `AnalyticsModule` | `launch_data` |
-| Optional: shop HUD | next `slotUnix` |
+| Creator Dashboard (both universes) | TCG-OC-01 — **done** (10 min copy; both `MESSAGE_ID_*` in `.env`) |
+| `src/server/Config/NPCConfig.lua` | **done** `PushLeadSeconds = 10 * 60` |
+| `src/server/Data/Template.lua` | **done** `EverOwnedLot = false` |
+| `src/server/Data/PlayerDataManager.lua` | **done** get/set `EverOwnedLot` |
+| `src/server/CollectorNotifyStore.lua` | **done** standard DataStore upsert |
+| `src/server/PropertyManager.server.lua` | **done** claim + release `Touch`; `Instance.new` `PromptNotificationOptIn` if missing; `FireClient` on first claim |
+| `src/server/Data/PlayerDataInit.server.lua` | **done** join re-touch in `Initialize` |
+| `src/shared/ExperienceNotifyModule.lua` | **done** session-deduped `PromptIfAllowed` |
+| `src/client/.../AnnouncementClient.client.lua` | **done** What's New + remote → `PromptIfAllowed` |
+| `docs/COLLECTOR_OPEN_CLOUD_NOTIFICATIONS.md` | **done** 8→10 min; hash sentence; follow-ups table |
+| Studio place `ReplicatedStorage.Events` | Not required for `PromptNotificationOptIn` — created at runtime if missing |
+| Optional: join handler + `AnalyticsModule` | TCG-OC-04 `launch_data` — not started |
+| Optional: shop HUD | TCG-OC-05 `nextUpcomingSlot` — not started |
 
 ---
 

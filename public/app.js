@@ -62,6 +62,10 @@ function renderFlags(data) {
       data.snapshotKeysConfigured.live ? "Live snapshot key set" : "Live snapshot key missing",
       data.snapshotKeysConfigured.live ? "on" : "warn",
     ),
+    chip(
+      data.datastoreKeysConfigured?.live ? "Live datastore key set" : "Live datastore key missing",
+      data.datastoreKeysConfigured?.live ? "on" : "warn",
+    ),
   );
 }
 
@@ -69,11 +73,35 @@ function renderJob(name, job, data) {
   const card = document.createElement("article");
   card.className = "card";
   const title = document.createElement("h2");
-  title.innerHTML = `<span>${name}</span><span>${job.allowlistN} allowlisted</span>`;
+  const aud = job.audience;
+  const notifyN = aud ? aud.notifyN ?? aud.n : null;
+  const audienceLabel =
+    notifyN === null
+      ? `${job.allowlistN} allowlisted`
+      : `${notifyN} will be notified`;
+  title.innerHTML = `<span>${name}</span><span>${audienceLabel}</span>`;
   const meta = document.createElement("p");
   meta.className = "meta";
   meta.textContent = `universe ${job.universeId} · visit ${job.hoursLocal.join("/")} · notify ${job.notifyHoursLocal.join("/")}`;
   card.append(title, meta);
+
+  const who = document.createElement("p");
+  if (aud && aud.source === "datastore") {
+    who.className = "banner";
+    const owned = aud.everOwnedN ?? aud.storeListedN ?? 0;
+    const stale = aud.staleN ?? aud.recencyDroppedN ?? 0;
+    who.textContent = `Will notify ${notifyN} · CollectorNotify / EverOwnedLot ${owned} · older than 14 days ${stale}`;
+  } else if (aud && aud.source === "allowlist") {
+    who.className = "hint";
+    who.textContent = `Will notify ${notifyN} from allowlist (CollectorNotify missing or unavailable)`;
+  } else {
+    who.className = "hint";
+    const jobKey = name.toLowerCase();
+    who.textContent = data.datastoreKeysConfigured?.[jobKey]
+      ? "CollectorNotify count pending — first list is on the next 30s tick"
+      : "CollectorNotify key missing — sending allowlist only";
+  }
+  card.append(who);
 
   if (name === "Sandbox") {
     const row = document.createElement("div");
@@ -94,7 +122,7 @@ function renderJob(name, job, data) {
     const hint = document.createElement("p");
     hint.className = "hint";
     hint.textContent = ready
-      ? "Ignores DRY_RUN and the 8-minute window. Does not spawn The Collector. Uses this UTC day’s one MOMENT (Roblox limit)."
+      ? "Ignores DRY_RUN and the 10-minute window. Does not spawn The Collector. Uses this UTC day’s one MOMENT (Roblox limit)."
       : sendBtn.title;
     card.append(hint);
   }
@@ -108,6 +136,7 @@ function renderJob(name, job, data) {
       keyOk ? "Notify key set" : "Notify key missing",
       msgOk ? "message_id set" : "message_id missing",
       data.liveSendsEnabled ? "LIVE_SENDS_ENABLED" : "Live HTTP gated off",
+      data.datastoreKeysConfigured?.live ? "CollectorNotify key set" : "CollectorNotify key missing",
     ];
     hint.textContent = parts.join(" · ");
     if (!keyOk || !msgOk) hint.classList.add("warn-text");

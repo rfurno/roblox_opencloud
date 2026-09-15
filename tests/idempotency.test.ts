@@ -6,7 +6,7 @@ import type { AppConfig } from "../src/config.ts";
 import { Ledger } from "../src/store.ts";
 import { sendSandboxNow, tick } from "../src/worker.ts";
 
-const PUSH_AT = 1_789_055_953;
+const PUSH_AT = 1_789_055_833;
 const SLOT_UNIX = 1_789_056_433;
 
 function writeAllowlist(dir: string, ids: number[]): string {
@@ -20,7 +20,7 @@ function cfgFor(dir: string, allowlistPath: string): AppConfig {
     schedule: {
       scheduleTimeZone: "Etc/UTC",
       jitterSeconds: 600,
-      pushLeadSeconds: 480,
+      pushLeadSeconds: 600,
       sendWindowSeconds: 60,
       tickIntervalSeconds: 30,
       sandbox: {
@@ -46,6 +46,7 @@ function cfgFor(dir: string, allowlistPath: string): AppConfig {
     logUserResults: false,
     apiKey: { sandbox: "sandbox-key", live: "live-key" },
     snapshotApiKey: { sandbox: "", live: "" },
+    datastoreApiKey: { sandbox: "", live: "" },
     messageId: { sandbox: "sandbox-msg", live: "live-msg" },
   };
 }

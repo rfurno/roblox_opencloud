@@ -1,6 +1,6 @@
 # Gachamon OpenCloud Controller — Operations
 
-**Status:** Draft, 2026-09-13. **v1 runbook is local** (`npm start`). Fly section is later. Numbers match [ARCHITECTURE.md](ARCHITECTURE.md). v1 MOMENT lead is 8 min; **OC-19** is 10 min (copy + `pushLeadSeconds` 600). Live alumni audience is **OC-15** (blocked on TCG).
+**Status:** Draft, 2026-09-15. **v1 runbook is local** (`npm start`). Fly section is later. Numbers match [ARCHITECTURE.md](ARCHITECTURE.md). MOMENT lead is **10 min** (`pushLeadSeconds` 600; OC-19). **OC-15 shipped** (list `CollectorNotify`, 14-day recency). TCG alumni store **published** sandbox + live.
 
 ```bash
 cp .env.example .env    # DRY_RUN=true
@@ -9,9 +9,9 @@ npm test
 caffeinate -i npm start # macOS: stay awake
 ```
 
-Dashboard: `http://127.0.0.1:3848`. Bind is loopback. Tabs: **Collector** | **Snapshots**. **Tick now** is MOMENT dry-run only. **Take snapshot now** POSTs Open Cloud (one per UTC day).
+Dashboard: `http://127.0.0.1:3848`. Bind is loopback. **One `npm start`.** A second copy exits `listen EADDRINUSE 127.0.0.1:3848` — `lsof -nP -iTCP:3848 -sTCP:LISTEN` then kill that PID (and its `npm start` parent). Tabs: **Collector** | **Snapshots**. Collector cards: **Will notify N · CollectorNotify / EverOwnedLot M · older than 14 days K**. **Tick now** is MOMENT dry-run only. **Take snapshot now** POSTs Open Cloud (one per UTC day).
 
-**If this process is not running at `pushAt`, that is a missed MOMENT.** If it is down for a whole UTC day, that is a missed Live snapshot. Do not close the lid through a send window.
+**If this process is not running at `pushAt`, that is a missed MOMENT.** If it is down for a whole UTC day, that is a missed Live snapshot. Do not close the lid through a send window. First `source=datastore` Live send: next **16:00 UTC** notify (`pushAt` ~15:50). Sandbox later hours the same UTC day are silent if 04:00 already spent the 1/day cap.
 
 ---
 
@@ -115,14 +115,13 @@ Do not commit real keys or real message ids. **Do not put `ROBLOX_API_KEY_*` in 
 2. Enable experience notifications.
 3. Create a **notification string** (no Open Cloud API for this):
    - Title: `The Collector`
-   - Body (v1): `The Collector is on the way to your shop. Be there in about 8 minutes.`
-   - Body (OC-19, before enabling 10 min lead): `The Collector is on the way to your shop. Be there in about 10 minutes.`
+   - Body: `The Collector is on the way to your shop. Be there in about 10 minutes.`
 4. Copy the string **asset id** into `MESSAGE_ID_SANDBOX` or `MESSAGE_ID_LIVE`.
 5. Create an API key with permission to send user notifications **for that universe only**. Store in local `.env` as `ROBLOX_API_KEY_SANDBOX` / `ROBLOX_API_KEY_LIVE`. Do not IP-allowlist unless this machine has a stable egress IP.
 5b. **Live snapshot (OC-18):** separate API key, Live universe `6674250544` only, operation **`universe-datastores.control:snapshot`**. Store as `ROBLOX_API_KEY_LIVE_SNAPSHOT`. Optional Sandbox twin. Do not IP-allowlist.
-5c. **Lot-alumni list (OC-15, not shipped):** separate API key, `universe-datastores.objects:list` + `:read` on that universe’s `CollectorNotify` store. Store as `ROBLOX_API_KEY_LIVE_DATASTORE` (optional Sandbox twin). Never reuse the notifications or snapshot key.
+5c. **Lot-alumni list (OC-15):** separate API key, `universe-datastores.objects:list` + `:read` on that universe’s `CollectorNotify` store only. Store as `ROBLOX_API_KEY_LIVE_DATASTORE` (optional `ROBLOX_API_KEY_SANDBOX_DATASTORE`). Never reuse the notifications or snapshot key. Restart `npm start`. The controller lists `CollectorNotify` on a 15 min cache (not during the 60s window) and the dashboard shows who will be notified. Missing store → allowlist. Empty 14-day alumni set → no HTTP.
 6. **Visit count (OC-13 blocker):** Creator Hub → the experience → Analytics / the public experience page. Confirm **≥100 visits**. If Sandbox is under 100, OC-13 is **blocked** — MOMENT sends will fail eligibility. Play-test Sandbox until the counter clears 100; do not assume the worker is broken.
-7. Recipients must be 13+ and have the experience **Notify** bell on. What's New `PromptOptIn` expires **2026-10-10**; Live alumni need TCG-OC-03b on first claim. Until then, opt in from the experience page.
+7. Recipients must be 13+ and have the experience **Notify** bell on. What's New `PromptOptIn` expires **2026-10-10**; first-claim `PromptOptIn` (TCG-OC-03b) is **published**. Operators can still opt in from the experience page.
 
 **Dashboard:** Collector tab → Sandbox **Send notification now**. Bypasses `DRY_RUN` and the send-lead window. Live has no such button. Snapshots tab → **Take snapshot now** (real HTTP; 1/UTC day). Restart `npm start` after `.env` changes. MOMENT writes `moment_days` (Roblox 1/day cap), so a later scheduled send that UTC day is skipped.
 
@@ -199,7 +198,7 @@ A slim image **without** `python3/make/g++` in the **build** stage will fail on 
 
 ### Deploy freeze
 
-Volume attach is exclusive: `fly deploy` = downtime. **Do not deploy in the 15 minutes around `pushAt`.** Next Live notify window is ~15:52 UTC (`16:00` minus 8 min ± jitter; OC-19: minus 10 min). Next Sandbox windows: each notify hour minus ~8 min (OC-19: ~10).
+Volume attach is exclusive: `fly deploy` = downtime. **Do not deploy in the 15 minutes around `pushAt`.** Next Live notify window is ~15:50 UTC (`16:00` minus 10 min ± jitter). Next Sandbox windows: each notify hour minus ~10 min.
 
 Rollback: `fly secrets set DRY_RUN=true` or `fly machine stop`. Does **not** change TCG spawn. Missed window ⇒ skip; no catch-up.
 
@@ -233,7 +232,7 @@ npm run tick -- --universe sandbox --dry-run
 
 ## Slot math (operator cheat)
 
-Send at `slotUnix − pushLead` only if the **`hoursLocal` hour that built the slot** is in `notifyHoursLocal` (same IANA zone; subset of `hoursLocal`). v1 `pushLead` = 480; **OC-19** = 600. Under `Etc/UTC` that hour equals the UTC hour in `slotKey`. Under `America/Sao_Paulo` Live is `hoursLocal: [13, 1]`, **`notifyHoursLocal: [13]`** (not `[16]`). Window **60s**.
+Send at `slotUnix − pushLead` only if the **`hoursLocal` hour that built the slot** is in `notifyHoursLocal` (same IANA zone; subset of `hoursLocal`). `pushLead` = **600**. Under `Etc/UTC` that hour equals the UTC hour in `slotKey`. Under `America/Sao_Paulo` Live is `hoursLocal: [13, 1]`, **`notifyHoursLocal: [13]`** (not `[16]`). Window **60s**.
 
 Worked example **`2026-09-10T16`** (Luau-verified copy of `hash32` with `span = 600`):
 
@@ -244,8 +243,8 @@ Worked example **`2026-09-10T16`** (Luau-verified copy of `hash32` with `span = 
 | jitter | **+433 s** |
 | nominal | `1789056000` = 16:00:00Z |
 | slotUnix | `1789056433` = **16:07:13Z** |
-| pushAt | `1789055953` = **15:59:13Z** |
-| window | 15:59:13Z–16:00:13Z |
+| pushAt | `1789055833` = **15:57:13Z** |
+| window | 15:57:13Z–15:58:13Z |
 | toast (game) | 16:05:13Z |
 | catch end (game) | 16:17:13Z |
 
@@ -290,7 +289,7 @@ npm test -- tests/clock.test.ts
 npm run tick -- --universe sandbox --dry-run
 ```
 
-Log line must contain `slotKey` (or the next upcoming **notify** key), `slotUnix` matching TCG, `pushAt = slotUnix - pushLead` (v1 480; OC-19 600). Dry-run writes **no** ledger rows.
+Log line must contain `slotKey` (or the next upcoming **notify** key), `slotUnix` matching TCG, `pushAt = slotUnix - 600`. Dry-run writes **no** ledger rows.
 
 ### 3. End-to-end Sandbox (OC-13)
 
@@ -309,8 +308,8 @@ Log line must contain `slotKey` (or the next upcoming **notify** key), `slotUnix
 
 Then:
 
-1. Wait for that hour’s send window (hour UTC minus ~8 min, ±10 min jitter; OC-19: ~10 min). Do **not** “wait for the next Sandbox hour” if an earlier hour already sent today.
-2. Notification Center should show “The Collector…” ~8 minutes before TCG spawn (OC-19: ~10).
+1. Wait for that hour’s send window (hour UTC minus ~10 min, ±10 min jitter). Do **not** “wait for the next Sandbox hour” if an earlier hour already sent today.
+2. Notification Center should show “The Collector…” ~10 minutes before TCG spawn.
 3. Join before `slotUnix` with a claimed lot → Collector still spawns from the **game**.
 4. Ignore a later slot and join after `slotUnix + 600` → **no** spawn (game).
 5. Re-run / second replica → unique key, no second MOMENT (`pending` retry does not double 2xx).
@@ -342,6 +341,9 @@ PR-5 only **commits** team userIds. Flipping `DRY_RUN=false` is this ops step, n
 | Snapshot 403 | Notifications key used, or wrong universe | Separate snapshot env var; Live universe `6674250544` only |
 | No snapshot row for yesterday UTC | Process down all day, or 429 never recovered | Laptop must be up some time that UTC day; 429 retries next tick |
 | Snapshot during 16:00 notify window | Scheduled job waits on purpose | Expected; next tick after the 60s window POSTs |
+| `listen EADDRINUSE … 3848` | Second `npm start` / leftover `tsx src/index.ts` | One process. `lsof -nP -iTCP:3848 -sTCP:LISTEN` and kill it, then start once |
+| Dashboard “Will notify 0” with rows in Creator Hub | List `id` not parsed / recency drop | Open Cloud id is `global/<userId>`. Confirm tick `source=datastore` `storeListedN` / `recencyDroppedN` |
+| `audienceN: 0` + `no slot in send window` | Normal most of the day | Not a failed list. Watch `audience refreshed` logs and the Collector card count |
 
 Missed window ⇒ **skip**. There is no catch-up send. Next chance is the next **notify** slot (and only if that user has not already used the UTC-day cap).
 

@@ -1,4 +1,5 @@
 import { loadAllowlist } from "./audience.ts";
+import { getLedger } from "./store.ts";
 import {
   clockSlotsNear,
   formatUtc,
@@ -65,12 +66,26 @@ export function buildStatus(cfg: AppConfig, nowUnix = Math.floor(Date.now() / 10
         nowUnix,
         slots.filter((s) => isNotifyHour(s.hourLocal, job.notifyHoursLocal)),
       ) ?? nextUpcoming(nowUnix, slots);
+    const cache = getLedger(cfg, name).getAudienceCache(job.universeId);
     jobs[name] = {
       universeId: job.universeId,
       placeId: job.placeId,
       hoursLocal: job.hoursLocal,
       notifyHoursLocal: job.notifyHoursLocal,
       allowlistN: loadAllowlist(job.allowlistPath).length,
+      audience: cache
+        ? {
+            source: cache.source,
+            notifyN: cache.userIds.length,
+            everOwnedN: cache.storeListedN,
+            staleN: cache.recencyDroppedN,
+            n: cache.userIds.length,
+            storeListedN: cache.storeListedN,
+            recencyDroppedN: cache.recencyDroppedN,
+            refreshedUnix: cache.refreshedUnix,
+            refreshedUtc: formatUtc(cache.refreshedUnix),
+          }
+        : null,
       windowSlot,
       nextNotify: nextNotify
         ? publicSlot(nextNotify, nowUnix, cfg.schedule.sendWindowSeconds, job.notifyHoursLocal)
@@ -94,6 +109,10 @@ export function buildStatus(cfg: AppConfig, nowUnix = Math.floor(Date.now() / 10
     snapshotKeysConfigured: {
       sandbox: apiKeyConfigured(cfg.snapshotApiKey.sandbox),
       live: apiKeyConfigured(cfg.snapshotApiKey.live),
+    },
+    datastoreKeysConfigured: {
+      sandbox: apiKeyConfigured(cfg.datastoreApiKey.sandbox),
+      live: apiKeyConfigured(cfg.datastoreApiKey.live),
     },
     messageConfigured: {
       sandbox: messageIdConfigured(cfg.messageId.sandbox),

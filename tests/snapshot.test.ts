@@ -7,7 +7,7 @@ import { parseSnapshotBody, snapshotUrl } from "../src/roblox.ts";
 import { takeSnapshotNow, tickSnapshots } from "../src/snapshot.ts";
 import { Ledger } from "../src/store.ts";
 
-const PUSH_AT = 1_789_055_953;
+const PUSH_AT = 1_789_055_833;
 const WINDOW_CLOSED = PUSH_AT + 60;
 
 function cfgFor(dir: string): AppConfig {
@@ -15,7 +15,7 @@ function cfgFor(dir: string): AppConfig {
     schedule: {
       scheduleTimeZone: "Etc/UTC",
       jitterSeconds: 600,
-      pushLeadSeconds: 480,
+      pushLeadSeconds: 600,
       sendWindowSeconds: 60,
       tickIntervalSeconds: 30,
       sandbox: {
@@ -41,6 +41,7 @@ function cfgFor(dir: string): AppConfig {
     logUserResults: false,
     apiKey: { sandbox: "", live: "" },
     snapshotApiKey: { sandbox: "", live: "live-snapshot-key" },
+    datastoreApiKey: { sandbox: "", live: "" },
     messageId: { sandbox: "", live: "" },
   };
 }

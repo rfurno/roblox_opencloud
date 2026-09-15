@@ -10,6 +10,9 @@ export type TickLog = {
   failN: number;
   skipN: number;
   dryRun: boolean;
+  storeListedN?: number;
+  recencyDroppedN?: number;
+  source?: "datastore" | "allowlist";
   note?: string;
 };
 

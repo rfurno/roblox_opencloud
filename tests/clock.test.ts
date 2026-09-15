@@ -16,7 +16,7 @@ const GOLDEN = {
   jitter: 433,
   nominalUnix: 1789056000,
   slotUnix: 1789056433,
-  pushAt: 1789055953,
+  pushAt: 1789055833,
 };
 
 describe("Luau hash32", () => {
@@ -51,7 +51,7 @@ describe("clockSlotsNear Etc/UTC", () => {
     timeZone: "Etc/UTC",
     hoursLocal: [16, 4],
     jitterSeconds: 600,
-    pushLeadSeconds: 480,
+    pushLeadSeconds: 600,
   };
 
   it("builds 2026-09-10T16 with slotUnix 1789056433", () => {
@@ -83,7 +83,7 @@ describe("notifyHoursLocal is the generating civil hour", () => {
       timeZone: "Etc/UTC",
       hoursLocal: [16, 4],
       jitterSeconds: 600,
-      pushLeadSeconds: 480,
+      pushLeadSeconds: 600,
     });
     const four = slots.find((s) => s.key === "2026-09-10T04")!;
     const sixteen = slots.find((s) => s.key === GOLDEN.key)!;
@@ -97,7 +97,7 @@ describe("notifyHoursLocal is the generating civil hour", () => {
       timeZone: "America/Sao_Paulo",
       hoursLocal: [13, 1],
       jitterSeconds: 600,
-      pushLeadSeconds: 480,
+      pushLeadSeconds: 600,
     });
     const sixteen = slots.find((s) => s.key === GOLDEN.key)!;
     expect(sixteen.hourLocal).toBe(13);
@@ -114,7 +114,7 @@ describe("send window", () => {
       timeZone: "Etc/UTC",
       hoursLocal: [16],
       jitterSeconds: 600,
-      pushLeadSeconds: 480,
+      pushLeadSeconds: 600,
     }).find((s) => s.key === GOLDEN.key)!;
     expect(inSendWindow(slot.pushAt, slot, 60)).toBe(true);
     expect(inSendWindow(slot.pushAt + 59, slot, 60)).toBe(true);

@@ -82,6 +82,130 @@ export type SnapshotApiResult = {
   latestSnapshotTime: string | null;
 };
 
+export const COLLECTOR_NOTIFY_STORE = "CollectorNotify";
+
+export type DataStoreEntryRef = {
+  id: string;
+  path: string;
+};
+
+export type ListEntriesResult = {
+  status: number;
+  body: string;
+  entries: DataStoreEntryRef[];
+  nextPageToken: string | null;
+};
+
+export type GetEntryResult = {
+  status: number;
+  body: string;
+  value: unknown;
+};
+
+export function listDataStoreEntriesUrl(
+  universeId: string,
+  storeId = COLLECTOR_NOTIFY_STORE,
+  pageToken?: string,
+): string {
+  const url = new URL(
+    `https://apis.roblox.com/cloud/v2/universes/${universeId}/data-stores/${encodeURIComponent(storeId)}/entries`,
+  );
+  url.searchParams.set("maxPageSize", "256");
+  if (pageToken) url.searchParams.set("pageToken", pageToken);
+  return url.toString();
+}
+
+export function dataStoreEntryUrl(path: string): string {
+  const trimmed = path.replace(/^\/+/, "");
+  return `https://apis.roblox.com/cloud/v2/${trimmed}`;
+}
+
+export function parseListedEntries(body: string): {
+  entries: DataStoreEntryRef[];
+  nextPageToken: string | null;
+} {
+  if (!body) return { entries: [], nextPageToken: null };
+  try {
+    const parsed = JSON.parse(body) as {
+      dataStoreEntries?: unknown;
+      nextPageToken?: unknown;
+    };
+    const raw = Array.isArray(parsed.dataStoreEntries) ? parsed.dataStoreEntries : [];
+    const entries: DataStoreEntryRef[] = [];
+    for (const item of raw) {
+      if (!item || typeof item !== "object") continue;
+      const rec = item as { id?: unknown; path?: unknown };
+      const id = typeof rec.id === "string" ? rec.id : "";
+      const path = typeof rec.path === "string" ? rec.path : "";
+      if (!id && !path) continue;
+      entries.push({
+        id,
+        path:
+          path ||
+          `universes/unknown/data-stores/${COLLECTOR_NOTIFY_STORE}/entries/${encodeURIComponent(id)}`,
+      });
+    }
+    return {
+      entries,
+      nextPageToken: typeof parsed.nextPageToken === "string" && parsed.nextPageToken ? parsed.nextPageToken : null,
+    };
+  } catch {
+    return { entries: [], nextPageToken: null };
+  }
+}
+
+export function parseEntryValue(body: string): unknown {
+  if (!body) return null;
+  try {
+    const parsed = JSON.parse(body) as { value?: unknown };
+    return parsed.value ?? null;
+  } catch {
+    return null;
+  }
+}
+
+export function readUpdatedUnix(value: unknown): number | null {
+  let v = value;
+  if (typeof v === "string") {
+    try {
+      v = JSON.parse(v);
+    } catch {
+      return null;
+    }
+  }
+  if (!v || typeof v !== "object") return null;
+  const n = Number((v as { updatedUnix?: unknown }).updatedUnix);
+  if (!Number.isFinite(n)) return null;
+  return Math.floor(n);
+}
+
+export async function listDataStoreEntries(req: {
+  universeId: string;
+  apiKey: string;
+  storeId?: string;
+  pageToken?: string;
+}): Promise<ListEntriesResult> {
+  if (!req.apiKey) return { status: 0, body: "missing api key", entries: [], nextPageToken: null };
+  const res = await fetch(listDataStoreEntriesUrl(req.universeId, req.storeId, req.pageToken), {
+    headers: { "x-api-key": req.apiKey },
+  });
+  const body = await res.text();
+  const parsed = parseListedEntries(body);
+  return { status: res.status, body, ...parsed };
+}
+
+export async function getDataStoreEntry(req: {
+  apiKey: string;
+  path: string;
+}): Promise<GetEntryResult> {
+  if (!req.apiKey) return { status: 0, body: "missing api key", value: null };
+  const res = await fetch(dataStoreEntryUrl(req.path), {
+    headers: { "x-api-key": req.apiKey },
+  });
+  const body = await res.text();
+  return { status: res.status, body, value: parseEntryValue(body) };
+}
+
 export function snapshotUrl(universeId: string): string {
   return `https://apis.roblox.com/cloud/v2/universes/${universeId}/data-stores:snapshot`;
 }

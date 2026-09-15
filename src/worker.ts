@@ -1,4 +1,4 @@
-import { loadAllowlist } from "./audience.ts";
+import { audienceForSend, loadAllowlist } from "./audience.ts";
 import {
   clockSlotsNear,
   inSendWindow,
@@ -15,7 +15,7 @@ import {
   sendMoment,
   type MomentResult,
 } from "./roblox.ts";
-import { Ledger, ledgerPath } from "./store.ts";
+import { getLedger } from "./store.ts";
 
 export type SendFn = (args: {
   userId: number;
@@ -33,19 +33,7 @@ export type TickOptions = {
   ledgers?: Partial<Record<UniverseName, Ledger>>;
 };
 
-const defaultLedgers = new Map<string, Ledger>();
 let tickChain: Promise<void> = Promise.resolve();
-
-export function getLedger(cfg: AppConfig, name: UniverseName, injected?: Ledger): Ledger {
-  if (injected) return injected;
-  const path = ledgerPath(cfg.dataDir, name);
-  let existing = defaultLedgers.get(path);
-  if (!existing) {
-    existing = new Ledger(path);
-    defaultLedgers.set(path, existing);
-  }
-  return existing;
-}
 
 export async function tick(cfg: AppConfig, opts: TickOptions = {}): Promise<void> {
   const run = () => tickInner(cfg, opts);
@@ -116,7 +104,9 @@ async function sendSlot(
   opts: TickOptions,
 ): Promise<void> {
   const job = jobOf(cfg.schedule, name);
-  const allowlist = loadAllowlist(job.allowlistPath);
+  const ledger = getLedger(cfg, name, opts.ledgers?.[name]);
+  const audience = audienceForSend(cfg, name, ledger);
+  const userIds = audience.userIds;
 
   if (dryRun) {
     recordTick({
@@ -126,11 +116,14 @@ async function sendSlot(
       slotKey: slot.key,
       slotUnix: slot.unix,
       pushAt: slot.pushAt,
-      audienceN: allowlist.length,
+      audienceN: userIds.length,
       sentN: 0,
       failN: 0,
-      skipN: allowlist.length,
+      skipN: userIds.length,
       dryRun: true,
+      storeListedN: audience.storeListedN,
+      recencyDroppedN: audience.recencyDroppedN,
+      source: audience.source,
       note: "dry-run: no HTTP, no ledger writes",
     });
     return;
@@ -144,17 +137,18 @@ async function sendSlot(
       slotKey: slot.key,
       slotUnix: slot.unix,
       pushAt: slot.pushAt,
-      audienceN: allowlist.length,
+      audienceN: userIds.length,
       sentN: 0,
       failN: 0,
-      skipN: allowlist.length,
+      skipN: userIds.length,
       dryRun: false,
+      source: audience.source,
       note: "LIVE_SENDS_ENABLED=false",
     });
     return;
   }
 
-  if (allowlist.length === 0) {
+  if (userIds.length === 0) {
     recordTick({
       universeId: job.universeId,
       job: name,
@@ -167,19 +161,20 @@ async function sendSlot(
       failN: 0,
       skipN: 0,
       dryRun: false,
-      note: "empty allowlist",
+      storeListedN: audience.storeListedN,
+      recencyDroppedN: audience.recencyDroppedN,
+      source: audience.source,
+      note: audience.source === "datastore" ? "empty datastore audience" : "empty allowlist",
     });
     return;
   }
-
-  const ledger = getLedger(cfg, name, opts.ledgers?.[name]);
   const send = opts.send ?? sendMoment;
   const utcDate = utcDateFromUnix(nowUnix);
   let sentN = 0;
   let failN = 0;
   let skipN = 0;
 
-  for (const userId of allowlist) {
+  for (const userId of userIds) {
     if (!inSendWindow(nowUnix, slot, cfg.schedule.sendWindowSeconds)) {
       skipN += 1;
       continue;
@@ -264,11 +259,14 @@ async function sendSlot(
     slotKey: slot.key,
     slotUnix: slot.unix,
     pushAt: slot.pushAt,
-    audienceN: allowlist.length,
+    audienceN: userIds.length,
     sentN,
     failN,
     skipN,
     dryRun: false,
+    storeListedN: audience.storeListedN,
+    recencyDroppedN: audience.recencyDroppedN,
+    source: audience.source,
   });
 }
 

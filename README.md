@@ -9,7 +9,7 @@ The TCG game only toasts players already in a running server (T−2 min). Arriva
 - Game repo (private): [rfurno/roblox_gacha](https://github.com/rfurno/roblox_gacha)
 - Spec: `roblox_gacha/docs/COLLECTOR_OPEN_CLOUD_NOTIFICATIONS.md`
 
-**Status (2026-09-13):** Local scheduler + dashboard (Collector + Snapshots tabs). MOMENT dry-run by default. Do not send Live notifications. Daily Live snapshot is independent of `DRY_RUN` (needs `ROBLOX_API_KEY_LIVE_SNAPSHOT`). Planned: 10 min lead (OC-19) and 14-day lot-alumni DataStore audience (OC-15; blocked on TCG).
+**Status (2026-09-15):** Local scheduler + dashboard. Send lead **10 min**. OC-15 lists TCG `CollectorNotify` (14-day recency, 15 min cache). Dashboard shows **Will notify N · EverOwnedLot M**. One `npm start` only (`EADDRINUSE` = a second copy). Daily Live snapshot is independent of `DRY_RUN`.
 
 ## Run locally
 
@@ -20,7 +20,7 @@ npm test
 npm start              # scheduler + http://127.0.0.1:3848
 ```
 
-Keep the machine awake (`caffeinate -i npm start` on macOS). The dashboard binds **127.0.0.1** only. Tabs: **Collector** | **Snapshots**. **Tick now** is always dry-run (no MOMENT HTTP, no send ledger). Snapshots still run on the 30s tick when the snapshot key is set.
+Keep the machine awake (`caffeinate -i npm start` on macOS). **One process** — a second `npm start` dies with `EADDRINUSE` on `127.0.0.1:3848`. Tabs: **Collector** | **Snapshots**. Collector cards show who will be notified (`CollectorNotify` / EverOwnedLot, last 14 days). **Tick now** is always dry-run (no MOMENT HTTP, no send ledger). Snapshots still run on the 30s tick when the snapshot key is set.
 
 One-shot (no browser):
 
@@ -35,8 +35,8 @@ Secrets stay in `.env` (gitignored). MOMENT dry-run does not need notification k
 | This service does | This service does not |
 | --- | --- |
 | Recompute TCG Collector `slotKey` / `slotUnix` | Spawn NPCs or write TCG ProfileStore |
-| POST Open Cloud MOMENT at `slotUnix − 480s` (OC-19: −600s) for **notify hours** | Send in-game `COLLECTOR_INCOMING` toasts |
-| Allowlist (Sandbox first); later 14-day lot alumni (OC-15); Live notify hour **16** only | Blast all Live CCU / Notify-bell; spend the 1/day cap on 04:00 UTC |
+| POST Open Cloud MOMENT at `slotUnix − 600s` (10 min) for **notify hours** | Send in-game `COLLECTOR_INCOMING` toasts |
+| Allowlist, or 14-day lot alumni via `CollectorNotify` (OC-15); Live notify hour **16** only | Blast all Live CCU / Notify-bell; spend the 1/day cap on 04:00 UTC |
 | Persist an idempotent send ledger under `./data` | Use MessagingService as offline notify |
 | POST one Live DataStore snapshot per UTC day | Download a dump, list Roblox snapshots, or restore keys |
 | Run when CCU is 0, if this process is up | Notify Studio Play `studio:<index>` slots |
@@ -53,12 +53,12 @@ Secrets stay in `.env` (gitignored). MOMENT dry-run does not need notification k
 
 | Event | When |
 | --- | --- |
-| Open Cloud MOMENT | `slotUnix − 480s` (8 min, v1), window 60s, notify hours only. **OC-19:** −600s (10 min) |
+| Open Cloud MOMENT | `slotUnix − 600s` (10 min), window 60s, notify hours only |
 | Live DataStore snapshot | First 30s tick of the UTC day with a snapshot key set; skips Collector send windows; 1/UTC day |
 | In-game toast | `slotUnix − 120s` — **game only** |
 | Collector spawn | `slotUnix` — **game only** |
 
-Worked example `2026-09-10T16`: jitter **+433s**, spawn **16:07:13Z**, send **15:59:13Z** (v1). OC-19 send **15:57:13Z**.
+Worked example `2026-09-10T16`: jitter **+433s**, spawn **16:07:13Z**, send **15:57:13Z**.
 
 ## Docs
 
@@ -68,3 +68,4 @@ Worked example `2026-09-10T16`: jitter **+433s**, spawn **16:07:13Z**, send **15
 | Architecture | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) |
 | Backlog | [docs/BACKLOG.md](docs/BACKLOG.md) |
 | Runbook | [docs/OPERATIONS.md](docs/OPERATIONS.md) |
+| TCG game contract | [docs/TCG_NOTIFICATIONS.md](docs/TCG_NOTIFICATIONS.md) |
