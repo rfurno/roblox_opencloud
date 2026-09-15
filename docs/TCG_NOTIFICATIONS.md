@@ -2,7 +2,7 @@
 
 **Audience:** TCG (`rfurno/roblox_gacha`). This is the game-side contract the Open Cloud controller (`roblox_opencloud`) needs.
 
-**Status:** 2026-09-15. Controller lists `CollectorNotify` every 15 min (Open Cloud list id `global/<userId>`), caches 14-day alumni, dashboard **Will notify N · EverOwnedLot M**. **OC-15 / OC-19 done.** TCG-OC-07, 09, 08, 02, 03b **published** sandbox + live. Send lead **10 min**. Leftover TCG is optional TCG-OC-04 / 05. First Live alumni MOMENT is the next 16:00 UTC window.
+**Status:** 2026-09-15. Controller lists `CollectorNotify` every 15 min (Open Cloud list id `global/<userId>`), caches 14-day alumni, dashboard **Will notify N · EverOwnedLot M**. **OC-15 / OC-19 done.** TCG-OC-01, 02, 03b, 04, 05, 07, 08, 09 **published** sandbox + live (stacked toasts tested). Send lead **10 min**. First Live alumni MOMENT is the next 16:00 UTC window.
 
 **Controller spec (do not re-implement the sender here):** this repo’s [ARCHITECTURE.md](ARCHITECTURE.md) / [PRODUCT.md](PRODUCT.md) / [BACKLOG.md](BACKLOG.md). Game spec: `roblox_gacha/docs/COLLECTOR_OPEN_CLOUD_NOTIFICATIONS.md` (there is no `COLLECTOR_OPEN_CLOUD_NOTIFICATIONS.md` in this repo). Ticket IDs: `TCG-OC-*` (this list) and `OC-*` (controller).
 
@@ -19,8 +19,8 @@ The game still owns spawn. The notification is a reminder, not a spawn trigger.
 | Notification string copy | Creator Dashboard (ops) | No Open Cloud API to create copy. Asset id goes in the controller `.env`, **not** TCG git. |
 | Who to ping (v1) | Controller allowlist | Sandbox first. Does not need TCG code. |
 | Who to ping (v2, Live alumni) | TCG `CollectorNotify` DataStore | **Published** sandbox + live 2026-09-15. **OC-15 done.** |
-| Opt-in (Notify bell) | TCG client `PromptOptIn` | What's New expires **2026-10-10**. First-claim prompt is in TCG git; `PropertyManager` `Instance.new`s `PromptNotificationOptIn` if missing. |
-| `launch_data` | Controller sends `collector:<slotKey>` | TCG currently **ignores** it. Spawn still uses the clock. |
+| Opt-in (Notify bell) | TCG client `PromptOptIn` | What's New expires **2026-10-10**. Durable prompt: once after FTUE complete, or after What's New if FTUE was already done (`NotifyOptInPrompted`). Not every join. |
+| `launch_data` | Controller sends `collector:<slotKey>` | TCG logs `collector_notify_join`. Spawn still uses the clock. |
 
 Places:
 
@@ -43,22 +43,24 @@ Not required to start Sandbox **allowlist** testing (controller + Dashboard stri
 | 3 | [TCG-OC-09](#tcg-oc-09--push-lead-8--10-min) | P1 | **Done** with controller OC-19 + Dashboard body |
 | 4 | [TCG-OC-08](#tcg-oc-08--profilestore-everownedlot) | P1 | **Published** |
 | 5 | [TCG-OC-02](#tcg-oc-02--collectornotify-datastore) | P1 | **Published** — OC-15 lists it |
-| 6 | [TCG-OC-03b](#tcg-oc-03b--durable-promptoptin-on-first-claim) | P1 | **Published** |
-| 7 | [TCG-OC-04](#tcg-oc-04--launch_data-analytics-optional) | P2 | Optional analytics |
-| 8 | [TCG-OC-05](#tcg-oc-05--next-slot-hud-optional) | P2 | Optional shop HUD |
+| 6 | [TCG-OC-03b](#tcg-oc-03b--durable-promptoptin-after-ftue) | P1 | **Published** (after FTUE, once) |
+| 7 | [TCG-OC-04](#tcg-oc-04--launch_data-analytics-optional) | P2 | **Published** |
+| 8 | [TCG-OC-05](#tcg-oc-05--collector-toast-not-a-persistent-hud) | P2 | **Published** as stacked toast |
 
 Already done, do not redo:
 
 | ID | Status |
 | --- | --- |
 | **TCG-OC-01** Creator Dashboard | **Done.** Both universes; string “about 10 minutes”; `MESSAGE_ID_SANDBOX` / `MESSAGE_ID_LIVE` in `.env`. |
-| **TCG-OC-03** What's New `2026-09-10-01` | Shipped live. `PROMPT_NOTIFICATION_OPT_IN` → `ExperienceNotifyModule.PromptIfAllowed()` (session de-dupe with first-claim). Card **expires 2026-10-10**. Not enough for Live alumni. |
+| **TCG-OC-03** What's New `2026-09-10-01` | Shipped live. Card **expires 2026-10-10**. Durable path is TCG-OC-03b. |
 | **TCG-OC-06** Do not “fix” `hash32` | Constraint, not a feature. Luau IEEE-754 multiply **is** the live clock (jitter **433** for `2026-09-10T16`). |
 | **TCG-OC-07** hash sentence | In TCG `docs/COLLECTOR_OPEN_CLOUD_NOTIFICATIONS.md` §2. |
-| **TCG-OC-09** `PushLeadSeconds = 10 * 60` | In TCG git. Controller OC-19 `pushLeadSeconds` 600. Dashboard body “about 10 minutes.” |
-| **TCG-OC-08** `EverOwnedLot` | In TCG git. Set after successful clone. Never cleared on release. |
-| **TCG-OC-02** `CollectorNotify` | **Published** sandbox + live 2026-09-15. Sandbox key `3757284903` = `{ updatedUnix = 1789496571, lotId = "1" }` after leave. Studio Play does not write. **OC-15 done.** |
-| **TCG-OC-03b** first-claim `PromptOptIn` | In TCG git (`ExperienceNotifyModule` + `AnnouncementClient`). Server `Instance.new`s `PromptNotificationOptIn` if missing. |
+| **TCG-OC-09** `PushLeadSeconds = 10 * 60` | **Published.** Controller OC-19 `pushLeadSeconds` 600. Dashboard body “about 10 minutes.” |
+| **TCG-OC-08** `EverOwnedLot` | **Published.** Set after successful clone. Never cleared on release. |
+| **TCG-OC-02** `CollectorNotify` | **Published** sandbox + live 2026-09-15. Sandbox key `3757284903` after leave. Studio Play does not write. **OC-15 done.** |
+| **TCG-OC-03b** `PromptOptIn` after FTUE | **Published.** Once after FTUE, or after What's New if FTUE was already done. `NotifyOptInPrompted` only after `PromptOptIn()` runs. |
+| **TCG-OC-04** `launch_data` | **Published.** `collector_notify_join` + slot key. Does not spawn. |
+| **TCG-OC-05** stacked toast | **Published** sandbox + live tested. Right-hand stack; Collector 20s; restack on dismiss. No persistent HUD. |
 
 ---
 
@@ -238,34 +240,16 @@ Controller will not enable Live DataStore sends until Sandbox shows:
 
 ---
 
-## TCG-OC-03b — Durable `PromptOptIn` on first claim
+## TCG-OC-03b — Durable `PromptOptIn` after FTUE
 
-What's New `2026-09-10-01` already prompts 13+ when that card is shown (`AnnouncementClient.client.lua` ~114–125). It **expires 2026-10-10**. Players who claimed a lot after dismissing it, or who never saw the card, stay opted out → Open Cloud **403**.
+**Published.** What's New `2026-09-10-01` expires **2026-10-10**. Durable path:
 
-After **first successful claim**, client:
+- Same session as FTUE complete (`Tutorial == "Completed"`).
+- Or after What's New if FTUE was already done and `NotifyOptInPrompted` is still false.
+- **Not** every join. **Not** first claim (that is still inside FTUE).
+- Set `NotifyOptInPrompted` only after `PromptOptIn()` actually runs. Roblox hides the modal for 30 days after a prior prompt, if already opted in, under 13, or in Studio Play.
 
-```lua
-local service = game:GetService("ExperienceNotificationService")
-local ok, canPrompt = pcall(function()
-	return service:CanPromptOptInAsync()
-end)
-if ok and canPrompt then
-	pcall(function()
-		service:PromptOptIn()
-	end)
-end
-```
-
-Rules:
-
-- **13+** only (`CanPromptOptInAsync` is false otherwise — do not special-case age in game code).
-- Do **not** block the claim if they dismiss or the API errors.
-- Fire **once**. Same session as FTUE complete (`Tutorial == "Completed"`), or after What's New if FTUE was already done and `NotifyOptInPrompted` is still false. Do **not** prompt every join. First claim is not the trigger.
-- `PromptNotificationOptIn` RemoteEvent + `ShouldPromptNotificationOptIn` RemoteFunction are `Instance.new`d if missing. Reuse `ExperienceNotifyModule.PromptIfAllowed` (`CanPromptOptInAsync` + session de-dupe; waits out loading / announcements).
-- Skip Studio Play if you skip `CollectorNotify` writes (same `IsStudio()` gate), or leave it on for local opt-in testing — either is fine; MOMENT still will not send to `studio:` slots.
-- **Double prompt:** What's New `2026-09-10-01` still calls `PromptOptIn` until **2026-10-10**. First-time players can hit both in one session (What's New on join, then first claim). Same `pcall` pattern is fine; prefer one prompt per session if both would run. Do not block claim.
-
-Until this ships, operators opt in from the experience page Notify bell.
+`CanPromptOptInAsync` + `PromptOptIn` via `ExperienceNotifyModule`. Do not block FTUE if they dismiss. Operators can still opt in from the experience page Notify bell.
 
 ---
 
@@ -287,33 +271,19 @@ Controller already sends:
 "join_experience": { "launch_data": "collector:2026-09-10T16" }
 ```
 
-TCG currently ignores join data. Spawn still uses `SpecialNpcDirector` clock. **Do not spawn from `launch_data`.** Joining after `slotUnix + 600` must still get **no** Collector for that slot.
+**Do not spawn from `launch_data`.** Joining after `slotUnix + 600` must still get **no** Collector for that slot.
 
-If you add analytics:
-
-1. Server, on join (`PlayerDataInit` / `onPlayerAdded`): `player:GetJoinData().LaunchData`.
-2. If it matches `^collector:%d%d%d%d%-%d%d%-%d%dT%d%d$`, log via `AnalyticsModule.LogCustomEvent` (e.g. `collector_notify_join` + the slot key).
-3. Never call `tickPlayer` / spawn from that string. `tickPlayer` is `local` in the director Script anyway.
+**Published.** `PlayerDataInit` logs `collector_notify_join` + `slotKey` when `LaunchData` matches `^collector:%d%d%d%d%-%d%d%-%d%dT%d%d$`. Spawn still uses the director clock only.
 
 ---
 
-## TCG-OC-05 — Next-slot HUD (optional)
+## TCG-OC-05 — Collector toast (not a persistent HUD)
 
-Surface the next Collector time in the shop HUD using the **game** clock, not the Open Cloud service.
+**Published** (sandbox + live tested). No countdown HUD. Incoming Collector uses the announcement toast.
 
-`SpecialNpcDirector.server.lua` is a **Script**, not a ModuleScript — do not `require` it. `clockSlotsNear`, `activeSlot`, and `nextUpcomingSlot` are all `local`.
-
-| Helper | What it is | HUD? |
-| --- | --- | --- |
-| `nextUpcomingSlot(now)` | next `slot.unix > now` | **Yes** — countdown to the next visit |
-| `activeSlot(now)` | slot whose **toast or catch** window contains `now` | Only “he is here / arriving now”. **Nil** most of the day |
-| `clockSlotsNear(now)` | published hours ±1 day | Building block; not the HUD answer by itself |
-
-Extract those helpers to a ModuleScript, or `FireClient` the next `slot.unix` from the director. Do not copy-paste a second jitter.
-
-- Same `slotUnix` as spawn.
-- Relative copy (“in about N minutes”) is safer than a wall clock. If you show a time, format in the **player’s** locale, never the server’s.
-- Offline players will not see this; that is what MOMENT is for.
+- Toasts **stack on the right** (up to 5). Restack when one leaves.
+- Collector stays **20s**; sales/delivery stay ~2s.
+- Same spawn clock (`SpecialNpcDirector`); no second jitter.
 
 ---
 
@@ -380,14 +350,15 @@ Controller-side checks after this lands (not TCG): Sandbox allowlist MOMENT in N
 | `src/server/Data/Template.lua` | **done** `EverOwnedLot = false` |
 | `src/server/Data/PlayerDataManager.lua` | **done** get/set `EverOwnedLot` |
 | `src/server/CollectorNotifyStore.lua` | **done** standard DataStore upsert |
-| `src/server/PropertyManager.server.lua` | **done** claim + release `Touch`; `Instance.new` `PromptNotificationOptIn` if missing; `FireClient` on first claim |
-| `src/server/Data/PlayerDataInit.server.lua` | **done** join re-touch in `Initialize` |
-| `src/shared/ExperienceNotifyModule.lua` | **done** session-deduped `PromptIfAllowed` |
-| `src/client/.../AnnouncementClient.client.lua` | **done** What's New + remote → `PromptIfAllowed` |
+| `src/server/PropertyManager.server.lua` | **done** claim + release `Touch` |
+| `src/server/Data/PlayerDataInit.server.lua` | **done** join re-touch; `collector_notify_join`; `ShouldPromptNotificationOptIn` |
+| `src/server/PromptNotificationOptIn.lua` | **done** remotes if missing; FireClient after FTUE |
+| `src/server/Tutorial/TutorialManager.lua` | **done** FireClient when Tutorial becomes Completed |
+| `src/shared/ExperienceNotifyModule.lua` | **done** `PromptIfAllowed`; ack only after `PromptOptIn()` |
+| `src/client/.../AnnouncementClient.client.lua` | **done** after What's New, invoke ShouldPrompt |
+| `src/client/.../Notifications.client.lua` | **done** right-hand stack; Collector 20s |
 | `docs/COLLECTOR_OPEN_CLOUD_NOTIFICATIONS.md` | **done** 8→10 min; hash sentence; follow-ups table |
-| Studio place `ReplicatedStorage.Events` | Not required for `PromptNotificationOptIn` — created at runtime if missing |
-| Optional: join handler + `AnalyticsModule` | TCG-OC-04 `launch_data` — not started |
-| Optional: shop HUD | TCG-OC-05 `nextUpcomingSlot` — not started |
+| Studio place `ReplicatedStorage.Events` | Not required — remotes created at runtime if missing |
 
 ---
 

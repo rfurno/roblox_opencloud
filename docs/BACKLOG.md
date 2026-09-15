@@ -4,7 +4,7 @@
 
 Priority: **P0** clock/safety, **P1** Sandbox send, **P2** Live / audience / polish.
 
-IDs in this repo: `OC-*`. TCG follow-ups (other repo): `TCG-OC-*`. P1 game work is **published**; P2 leftover is TCG-OC-04 / 05.
+IDs in this repo: `OC-*`. TCG follow-ups (other repo): `TCG-OC-*`. Game P1 + TCG-OC-04/05 are **published** (stacked toast tested sandbox + live).
 
 ---
 
@@ -81,16 +81,16 @@ Released owners stay eligible for **14 days after release** (TCG touches `update
 
 ## TCG follow-ups (not this repo)
 
-P1 TCG work is **published**. Leftover is optional P2. Implement in `rfurno/roblox_gacha`.
+P1 TCG work and TCG-OC-04/05 are **published**. Implement leftovers in `rfurno/roblox_gacha` only if product asks.
 
 | ID | P | Item | Notes |
 | --- | --- | --- | --- |
 | TCG-OC-01 | P1 | Creator Dashboard | **Done.** Notifications on both universes; string “about 10 minutes”; ids in controller `.env`. |
 | TCG-OC-02 | P1 | `CollectorNotify` DataStore | **Published** sandbox + live 2026-09-15. Key = `tostring(userId)`. Upsert on claim / release / join-if-`EverOwnedLot`. Skip Studio Play. |
 | TCG-OC-03 | P1 | `PromptOptIn()` What's New | Shipped live. `2026-09-10-01` through **2026-10-10**. Durable path is TCG-OC-03b. |
-| TCG-OC-03b | P1 | Durable `PromptOptIn` on first claim | **Published** sandbox + live. `CanPromptOptInAsync` + `PromptOptIn()` after first successful claim (13+). Do not block claim if dismissed. |
-| TCG-OC-04 | P2 | `launch_data` analytics | Read `collector:<slotKey>` on join for analytics only. **Do not spawn from it.** |
-| TCG-OC-05 | P2 | Next-slot UI | Surface next Collector time in the shop HUD (game clock, not this service). |
+| TCG-OC-03b | P1 | Durable `PromptOptIn` after FTUE | **Published.** Once after FTUE complete, or after What's New if FTUE was already done. Not every join. |
+| TCG-OC-04 | P2 | `launch_data` analytics | **Published.** `collector_notify_join` + slot key. **Do not spawn from it.** |
+| TCG-OC-05 | P2 | Next-slot UI | **Published** as stacked toast (sandbox + live tested). Collector 20s, right-side stack. |
 | TCG-OC-06 | P2 | Do **not** “fix” `hash32` to uint32 mul | Luau double multiply **is** the live clock (jitter 433 for `2026-09-10T16`). Changing it would move spawn times. If TCG ever changes hash, this controller follows. |
 | TCG-OC-07 | P2 | Patch TCG spec §2 | **Done.** IEEE-754 multiply, then `% 2^32`; golden jitter 433. |
 | TCG-OC-08 | P1 | ProfileStore `EverOwnedLot` | **Published** sandbox + live 2026-09-15. Set `true` on first successful claim; **never clear** on release. Join re-touches `CollectorNotify`. |
