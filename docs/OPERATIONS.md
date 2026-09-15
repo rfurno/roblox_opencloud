@@ -1,6 +1,6 @@
 # Gachamon OpenCloud Controller — Operations
 
-**Status:** Draft, 2026-09-12. **v1 runbook is local** (`npm start`). Fly section is later. Numbers match [ARCHITECTURE.md](ARCHITECTURE.md).
+**Status:** Draft, 2026-09-13. **v1 runbook is local** (`npm start`). Fly section is later. Numbers match [ARCHITECTURE.md](ARCHITECTURE.md). v1 MOMENT lead is 8 min; **OC-19** is 10 min (copy + `pushLeadSeconds` 600). Live alumni audience is **OC-15** (blocked on TCG).
 
 ```bash
 cp .env.example .env    # DRY_RUN=true
@@ -40,6 +40,8 @@ Live and Sandbox **share the 16:00 UTC send window** (same `slotKey` → same ji
 | `ROBLOX_API_KEY_LIVE` | for Live HTTP | Separate notifications key |
 | `ROBLOX_API_KEY_LIVE_SNAPSHOT` | for daily Live DataStore snapshot | `universe-datastores.control:snapshot` on Live `6674250544` only. **Not** the notifications key |
 | `ROBLOX_API_KEY_SANDBOX_SNAPSHOT` | no | Optional same scope on Sandbox `7034342160` |
+| `ROBLOX_API_KEY_LIVE_DATASTORE` | OC-15 | `universe-datastores.objects:list` + `:read` on Live `CollectorNotify`. **Not** the notify or snapshot key |
+| `ROBLOX_API_KEY_SANDBOX_DATASTORE` | no | Optional same on Sandbox |
 | `MESSAGE_ID_SANDBOX` | for Sandbox HTTP | Creator Dashboard notification string asset id |
 | `MESSAGE_ID_LIVE` | for Live HTTP | Separate string |
 | `LIVE_SENDS_ENABLED` | no | `false` unless explicitly enabling Live |
@@ -61,6 +63,8 @@ ROBLOX_API_KEY_SANDBOX=rbx_placeholder_sandbox
 ROBLOX_API_KEY_LIVE=rbx_placeholder_live
 ROBLOX_API_KEY_LIVE_SNAPSHOT=rbx_placeholder_live_snapshot
 ROBLOX_API_KEY_SANDBOX_SNAPSHOT=
+ROBLOX_API_KEY_LIVE_DATASTORE=
+ROBLOX_API_KEY_SANDBOX_DATASTORE=
 MESSAGE_ID_SANDBOX=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
 MESSAGE_ID_LIVE=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
 ```
@@ -111,14 +115,16 @@ Do not commit real keys or real message ids. **Do not put `ROBLOX_API_KEY_*` in 
 2. Enable experience notifications.
 3. Create a **notification string** (no Open Cloud API for this):
    - Title: `The Collector`
-   - Body: `The Collector is on the way to your shop. Be there in about 8 minutes.`
+   - Body (v1): `The Collector is on the way to your shop. Be there in about 8 minutes.`
+   - Body (OC-19, before enabling 10 min lead): `The Collector is on the way to your shop. Be there in about 10 minutes.`
 4. Copy the string **asset id** into `MESSAGE_ID_SANDBOX` or `MESSAGE_ID_LIVE`.
 5. Create an API key with permission to send user notifications **for that universe only**. Store in local `.env` as `ROBLOX_API_KEY_SANDBOX` / `ROBLOX_API_KEY_LIVE`. Do not IP-allowlist unless this machine has a stable egress IP.
 5b. **Live snapshot (OC-18):** separate API key, Live universe `6674250544` only, operation **`universe-datastores.control:snapshot`**. Store as `ROBLOX_API_KEY_LIVE_SNAPSHOT`. Optional Sandbox twin. Do not IP-allowlist.
+5c. **Lot-alumni list (OC-15, not shipped):** separate API key, `universe-datastores.objects:list` + `:read` on that universe’s `CollectorNotify` store. Store as `ROBLOX_API_KEY_LIVE_DATASTORE` (optional Sandbox twin). Never reuse the notifications or snapshot key.
 6. **Visit count (OC-13 blocker):** Creator Hub → the experience → Analytics / the public experience page. Confirm **≥100 visits**. If Sandbox is under 100, OC-13 is **blocked** — MOMENT sends will fail eligibility. Play-test Sandbox until the counter clears 100; do not assume the worker is broken.
-7. Recipients must be 13+ and have the experience **Notify** bell on. Until TCG ships `PromptOptIn()` (`TCG-OC-03`), opt in from the experience page.
+7. Recipients must be 13+ and have the experience **Notify** bell on. What's New `PromptOptIn` expires **2026-10-10**; Live alumni need TCG-OC-03b on first claim. Until then, opt in from the experience page.
 
-**Dashboard:** Collector tab → Sandbox **Send notification now**. Bypasses `DRY_RUN` and the 8-minute window. Live has no such button. Snapshots tab → **Take snapshot now** (real HTTP; 1/UTC day). Restart `npm start` after `.env` changes. MOMENT writes `moment_days` (Roblox 1/day cap), so a later scheduled send that UTC day is skipped.
+**Dashboard:** Collector tab → Sandbox **Send notification now**. Bypasses `DRY_RUN` and the send-lead window. Live has no such button. Snapshots tab → **Take snapshot now** (real HTTP; 1/UTC day). Restart `npm start` after `.env` changes. MOMENT writes `moment_days` (Roblox 1/day cap), so a later scheduled send that UTC day is skipped.
 
 Manual curl (off-clock Stage-2 probe; burns that user’s UTC-day cap):
 
@@ -193,7 +199,7 @@ A slim image **without** `python3/make/g++` in the **build** stage will fail on 
 
 ### Deploy freeze
 
-Volume attach is exclusive: `fly deploy` = downtime. **Do not deploy in the 15 minutes around `pushAt`.** Next Live notify window is ~15:52 UTC (`16:00` minus 8 min ± jitter). Next Sandbox windows: each notify hour minus ~8 min.
+Volume attach is exclusive: `fly deploy` = downtime. **Do not deploy in the 15 minutes around `pushAt`.** Next Live notify window is ~15:52 UTC (`16:00` minus 8 min ± jitter; OC-19: minus 10 min). Next Sandbox windows: each notify hour minus ~8 min (OC-19: ~10).
 
 Rollback: `fly secrets set DRY_RUN=true` or `fly machine stop`. Does **not** change TCG spawn. Missed window ⇒ skip; no catch-up.
 
@@ -227,7 +233,7 @@ npm run tick -- --universe sandbox --dry-run
 
 ## Slot math (operator cheat)
 
-Send at `slotUnix − 480` only if the **`hoursLocal` hour that built the slot** is in `notifyHoursLocal` (same IANA zone; subset of `hoursLocal`). Under `Etc/UTC` that hour equals the UTC hour in `slotKey`. Under `America/Sao_Paulo` Live is `hoursLocal: [13, 1]`, **`notifyHoursLocal: [13]`** (not `[16]`). Window **60s**.
+Send at `slotUnix − pushLead` only if the **`hoursLocal` hour that built the slot** is in `notifyHoursLocal` (same IANA zone; subset of `hoursLocal`). v1 `pushLead` = 480; **OC-19** = 600. Under `Etc/UTC` that hour equals the UTC hour in `slotKey`. Under `America/Sao_Paulo` Live is `hoursLocal: [13, 1]`, **`notifyHoursLocal: [13]`** (not `[16]`). Window **60s**.
 
 Worked example **`2026-09-10T16`** (Luau-verified copy of `hash32` with `span = 600`):
 
@@ -284,7 +290,7 @@ npm test -- tests/clock.test.ts
 npm run tick -- --universe sandbox --dry-run
 ```
 
-Log line must contain `slotKey` (or the next upcoming **notify** key), `slotUnix` matching TCG, `pushAt = slotUnix - 480`. Dry-run writes **no** ledger rows.
+Log line must contain `slotKey` (or the next upcoming **notify** key), `slotUnix` matching TCG, `pushAt = slotUnix - pushLead` (v1 480; OC-19 600). Dry-run writes **no** ledger rows.
 
 ### 3. End-to-end Sandbox (OC-13)
 
@@ -303,8 +309,8 @@ Log line must contain `slotKey` (or the next upcoming **notify** key), `slotUnix
 
 Then:
 
-1. Wait for that hour’s send window (hour UTC minus ~8 min, ±10 min jitter). Do **not** “wait for the next Sandbox hour” if an earlier hour already sent today.
-2. Notification Center should show “The Collector…” ~8 minutes before TCG spawn.
+1. Wait for that hour’s send window (hour UTC minus ~8 min, ±10 min jitter; OC-19: ~10 min). Do **not** “wait for the next Sandbox hour” if an earlier hour already sent today.
+2. Notification Center should show “The Collector…” ~8 minutes before TCG spawn (OC-19: ~10).
 3. Join before `slotUnix` with a claimed lot → Collector still spawns from the **game**.
 4. Ignore a later slot and join after `slotUnix + 600` → **no** spawn (game).
 5. Re-run / second replica → unique key, no second MOMENT (`pending` retry does not double 2xx).

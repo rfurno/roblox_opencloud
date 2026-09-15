@@ -1,6 +1,6 @@
 # Gachamon OpenCloud Controller — Architecture
 
-**Status:** Draft, 2026-09-12. **v1 host is this laptop** (`npm start` + localhost dashboard, Collector + Snapshots tabs). Fly remains a later always-on option. Numbers must match [PRODUCT.md](PRODUCT.md) and [OPERATIONS.md](OPERATIONS.md).
+**Status:** Draft, 2026-09-13. **v1 host is this laptop** (`npm start` + localhost dashboard, Collector + Snapshots tabs). Fly remains a later always-on option. Numbers must match [PRODUCT.md](PRODUCT.md) and [OPERATIONS.md](OPERATIONS.md). **OC-19** (not shipped): `pushLeadSeconds` 600. **OC-15** (not shipped): lot-alumni DataStore audience.
 
 Clock source of truth is TCG, not this repo:
 
@@ -26,7 +26,7 @@ If controller and game disagree on `slotUnix`, **fix the controller**.
 | Sandbox `hoursLocal` (visit / clock) | `[4, 10, 16, 22]` |
 | Sandbox `notifyHoursLocal` | `[4, 10, 16, 22]` — subset or arm one hour per test day |
 | `jitterSeconds` | `600` |
-| `pushLeadSeconds` | `480` |
+| `pushLeadSeconds` | `480` (v1). **OC-19:** `600` |
 | `sendWindowSeconds` | `60` |
 | `inGameToastLeadSeconds` | `120` (game only) |
 | `catchWindowSeconds` | `600` (game only) |
@@ -43,7 +43,7 @@ Committed `config/schedule.yaml` (intended):
 ```yaml
 scheduleTimeZone: "Etc/UTC"
 jitterSeconds: 600
-pushLeadSeconds: 480
+pushLeadSeconds: 480     # OC-19: 600
 sendWindowSeconds: 60
 tickIntervalSeconds: 30
 live:
@@ -93,11 +93,11 @@ flowchart TD
   dropStudio -->|yes| skipStudio["Never send"]
   dropStudio -->|no| notify{"hoursLocal hour in notifyHoursLocal?"}
   notify -->|no| skipHour["Compute only; no HTTP"]
-  notify -->|yes| win{"now in [slotUnix-480, slotUnix-480+60)?"}
+  notify -->|yes| win{"now in [slotUnix-pushLead, slotUnix-pushLead+60)?"}
   win -->|no| skip["Skip"]
   win -->|yes| dry{"DRY_RUN?"}
   dry -->|yes| logOnly["Log; no HTTP; no ledger writes"]
-  dry -->|no| aud["Load allowlist"]
+  dry -->|no| aud["Load allowlist or OC-15 cache"]
   aud --> gated{"empty list or Live gated off?"}
   gated -->|yes| skipAud["Log, no HTTP"]
   gated -->|no| users["Each userId sequential"]
@@ -185,7 +185,7 @@ jitter = (h % (2 * span + 1)) - span    -- span = 600, inclusive [-600, +600]
 
 | key | hash32 (Luau) | jitter s | nominalUnix | slotUnix | slot UTC | pushAt UTC |
 | --- | ---: | ---: | ---: | ---: | --- | --- |
-| `2026-09-10T16` | 1396388120 | **433** | 1789056000 | 1789056433 | 16:07:13Z | 15:59:13Z |
+| `2026-09-10T16` | 1396388120 | **433** | 1789056000 | 1789056433 | 16:07:13Z | 15:59:13Z (v1, −480s). OC-19: **15:57:13Z** (−600s) |
 | `2026-09-10T04` | 1379463408 | 213 | 1789012800 | 1789013013 | 04:03:33Z | 03:55:33Z |
 | `2026-09-10T10` | 1429943360 | −267 | 1789034400 | 1789034133 | 09:55:33Z | 09:47:33Z |
 | `2026-09-10T22` | 1480423312 | 454 | 1789077600 | 1789078054 | 22:07:34Z | 21:59:34Z |
@@ -236,7 +236,7 @@ catchEnd    = 1789057033          // 16:17:13Z  game only
 
 Scheduled snapshots **skip** while any Collector **notify** slot is in its 60s send window, then retry next tick. Manual dashboard snapshot does not wait. Snapshots do **not** honor `DRY_RUN` (that flag is MOMENT-only).
 
-A slot is eligible to **send** iff the **`hoursLocal` hour used to build that slot** is in `notifyHoursLocal` **and** `now ∈ [slotUnix - 480, slotUnix - 480 + 60)`. `notifyHoursLocal` ⊆ `hoursLocal` in the **same** IANA zone — not a second UTC conversion, not `slotKey`’s UTC hour unless the zone is `Etc/UTC`. Visit hours still compute every TCG slot. If `pushAt` is past, **skip**. Do not send in the toast window or after spawn.
+A slot is eligible to **send** iff the **`hoursLocal` hour used to build that slot** is in `notifyHoursLocal` **and** `now ∈ [slotUnix - pushLead, slotUnix - pushLead + 60)`. v1 `pushLead` = 480; **OC-19** = 600. `notifyHoursLocal` ⊆ `hoursLocal` in the **same** IANA zone — not a second UTC conversion, not `slotKey`’s UTC hour unless the zone is `Etc/UTC`. Visit hours still compute every TCG slot. If `pushAt` is past, **skip**. Do not send in the toast window or after spawn.
 
 **Live `Etc/UTC` `notifyHoursLocal: [16]`** so the 1/day cap is not spent on 04:00 UTC (01:00 Brazil). TCG still spawns at 04. Brazil equivalent: `America/Sao_Paulo`, `hoursLocal: [13, 1]`, **`notifyHoursLocal: [13]`** → send only 16:00Z. Keeping `[16]` in that zone matches no generating hour → zero Live MOMENTs. Golden: after a 04:00 send, 16:00 is skipped; with notify `[16]` under `Etc/UTC`, 04:00 is computed but not sent; Sao Paulo `[13, 1]` + notify `[13]` → send only 16:00Z.
 
@@ -382,14 +382,18 @@ Docs: [Snapshot Data Stores](https://create.roblox.com/docs/cloud/reference/Data
 
 ## Audience
 
-TCG does **not** export shop owners. There is no `CollectorNotify` DataStore in `roblox_gacha` today (spec-only). Do not invent recipients.
+TCG does **not** export lot alumni today. There is no `CollectorNotify` DataStore in `roblox_gacha` (spec-only). Do not invent recipients. Do not blast Notify-bell CCU.
 
 | Stage | Source |
 | --- | --- |
 | v1 | `config/allowlist.sandbox.json` `{ "userIds": [...] }`. Live file `[]`. `LIVE_SENDS_ENABLED=false` |
-| v2 | Open Cloud DataStores on a store **in that universe**, name TBD (`CollectorNotify` suggested). Value `{ lotId, updatedUnix }`. Ids updated in last 14 days. **Blocked on TCG.** |
+| v2 (OC-15) | Open Cloud list of DataStore **`CollectorNotify`** **in that universe**. Key = `userId` string (**not** `lotId` — lots are reused; MOMENT is per user). Value includes `updatedUnix`. Keep ids with `updatedUnix` in the last **14 days**. Dormant alumni who join again are re-touched by TCG and re-enter the window. **Blocked on TCG-OC-02 + TCG-OC-08.** |
 
 v1 does not check claimed-lot itself. Operators put ids on the list on purpose.
+
+v2 list/filter happens **outside** the 60s send window (cache userIds). Fallback to allowlist if the store is missing. Empty audience ⇒ no HTTP. New key `ROBLOX_API_KEY_*_DATASTORE` (`objects:list` / `objects:read`); never reuse the notifications or snapshot key. Shared 16:00: time-budget sandbox or split processes if Live alumni POSTs would miss the window.
+
+Released owners stay eligible for 14 days after TCG bumps `updatedUnix` on release. Current offline owners are included. `lotId` in the value is optional debug — not used to send.
 
 ---
 
@@ -508,7 +512,8 @@ Load: Live **1 notify** slot/day (16) + Sandbox up to 4 (1/day cap per user); te
 - Do **not** IP-allowlist Roblox keys unless a Fly **dedicated** egress IPv4 is documented (Fly shared egress is not stable; a laptop-locked key 403s from Fly).
 - Job object binds `universeId` + key + allowlist. Tests: Sandbox fixture never contains `6674250544`. Rotate both keys if mixed.
 - Snapshot keys are **separate** (`ROBLOX_API_KEY_LIVE_SNAPSHOT`). Live snapshot HTTP uses Live universe id only; Sandbox snapshot never uses `6674250544`.
-- Live **MOMENT** HTTP requires `LIVE_SENDS_ENABLED=true` **and** a non-empty Live allowlist. Live **snapshot** HTTP requires only the snapshot key.
+- Live **MOMENT** HTTP requires `LIVE_SENDS_ENABLED=true` **and** a non-empty Live audience (v1 allowlist; OC-15 cached alumni or allowlist fallback). Live **snapshot** HTTP requires only the snapshot key.
+- Audience DataStore keys (`ROBLOX_API_KEY_*_DATASTORE`) are **separate** from notifications and snapshot. List/read `CollectorNotify` only.
 - Local dashboard binds `127.0.0.1` only. It never returns API keys. UI tick is dry-run only. Snapshot button is real HTTP.
 - PII = Roblox `userId` only. Do not commit a large Live player list.
 
@@ -533,7 +538,9 @@ How to verify a slot against TCG: [OPERATIONS.md](OPERATIONS.md).
 | Live/Sandbox key mixup | High | Typed job; tests; rotate |
 | Shared 16:00 window | Med | v1 sequential; v2 time-budget or split |
 | 1/day cap on 04:00 UTC | High if unfixed | Live `notifyHoursLocal: [16]` |
-| Nobody opted in (403) | Med | Expected until TCG `PromptOptIn` |
+| Nobody opted in (403) | Med | Expected until TCG `PromptOptIn` (What's New expires 2026-10-10; need TCG-OC-03b on claim) |
+| DataStore list inside 60s window | High if unfixed | OC-15: refresh audience before `pushAt`; window is POST only |
+| `CollectorNotify` keyed by lotId | High | Key is `userId`. Lots are reused; former owners would be overwritten |
 | TCG changes hours without this repo | Med | Hours in YAML; compare to `NPCConfig.lua` |
 | Missed UTC-day snapshot (laptop asleep all day) | Med | Same host as MOMENT; dashboard Snapshots tab; retry next tick if 429 |
 | Snapshot key mixed with notifications key | High | Separate env vars; 403 = wrong scope |

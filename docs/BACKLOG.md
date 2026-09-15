@@ -1,6 +1,6 @@
 # Gachamon OpenCloud Controller — Backlog
 
-**Status (2026-09-12):** Local scheduler + dashboard (Collector + Snapshots). MOMENT HTTP dry-run by default. Daily Live snapshot implemented (OC-18). Spec: `roblox_gacha/docs/COLLECTOR_OPEN_CLOUD_NOTIFICATIONS.md`.
+**Status (2026-09-13):** Local scheduler + dashboard (Collector + Snapshots). MOMENT HTTP dry-run by default. Daily Live snapshot implemented (OC-18). Planned: **10 min** push lead (OC-19) and Live **lot-alumni** DataStore audience (OC-15). Spec: `roblox_gacha/docs/COLLECTOR_OPEN_CLOUD_NOTIFICATIONS.md`.
 
 Priority: **P0** clock/safety, **P1** Sandbox send, **P2** Live / audience / polish.
 
@@ -29,10 +29,11 @@ IDs in this repo: `OC-*`. TCG follow-ups (other repo): `TCG-OC-*` with status **
 | OC-12 | P1 | CI | GitHub Actions `npm test` only (PR-1). 5-minute schedule floor is why this is not the cron. **No** `ROBLOX_API_KEY_*` in GitHub. TZ matrix from OC-02. |
 | OC-13 | P1 | First Sandbox allowlist send | **Gates (all required):** (1) TCG-OC-01 Sandbox dashboard string + API key in local `.env`; (2) Sandbox experience **≥100 visits**; (3) allowlisted user is 13+ and Notify-bell opted in; (4) clock golden still **433** for `2026-09-10T16`; (5) `DRY_RUN=false` armed **only** for that UTC day/hour for a user with no MOMENT that UTC day; (6) `npm start` running, laptop awake. Curl remains the Stage-2 off-clock probe. Re-run does not duplicate. |
 | OC-14 | P2 | Gated Live allowlist | Tiny list + `LIVE_SENDS_ENABLED` (ops). Notify hour remains 16. Explicit operator approval. Same checks vs TCG Live logs. |
-| OC-15 | P2 | DataStore audience | Read TCG store via Open Cloud when it exists. 14-day recency. Fallback to allowlist if missing. Time-budget sandbox or split processes (shared 16:00 window). **Blocked on TCG-OC-02.** |
+| OC-15 | P2 | DataStore audience (lot alumni) | See **OC-15 contract** below. List TCG `CollectorNotify` (key = `userId`). Keep ids with `updatedUnix` in last **14 days**. Fallback to allowlist if store missing. Refresh audience **before** the 60s send window. Time-budget sandbox or split processes (shared 16:00). **Blocked on TCG-OC-02 + TCG-OC-08.** |
 | OC-16 | P2 | `{localTime}` parameter | Optional dashboard param from per-user IANA zone. Display only. Missing zone → relative sentence. |
 | OC-17 | P2 | Tick metrics | Stdout JSON tick logs (no `tick_log` table). Alert on 400, unexpected skip, and stopped Machine. |
 | OC-18 | P1 | Daily DataStore snapshot | Live `universe-datastores.control:snapshot` key in `ROBLOX_API_KEY_LIVE_SNAPSHOT`. One POST per UTC day; skip Collector send window; ledger in `live.sqlite`; dashboard Snapshots tab. Independent of `DRY_RUN`. **Done** (ops: put the key in `.env` and restart). |
+| OC-19 | P1 | Push lead 8 → 10 min | `pushLeadSeconds` **600**. Golden `2026-09-10T16` `pushAt` **1789055833** (was 1789055953). Send window still 60s. Dashboard copy must say “about 10 minutes” **before** HTTP enable (TCG-OC-01 / TCG-OC-09). `slotUnix` / jitter / toast / catch unchanged. |
 
 ---
 
@@ -47,10 +48,34 @@ Independently reviewable. Details also in the design doc PR Plan.
 | PR-1b | Daily Live DataStore snapshot + Snapshots tab | OC-18 |
 | PR-2 | First Sandbox allowlist ids; HTTP enable is **ops** (`DRY_RUN=false` in local `.env`) | OC-13 |
 | PR-3 | Gated Live allowlist ids | OC-14 |
+| PR-3b | Push lead 600s + dashboard copy | OC-19 (after TCG-OC-09 / new `message_id` if copy is a new string) |
 | PR-4 | Fly always-on (later) | OC-11 |
-| PR-5 | DataStore audience | OC-15 (blocked-external) |
+| PR-5 | DataStore audience (lot alumni) | OC-15 (blocked-external) |
 
 PR-2 commits team userIds + runbook. **`DRY_RUN=false` is an ops step** in local `.env`, not a code flag.
+
+Do not enable Live DataStore sends until Sandbox shows: claim → row; release → row stays; 15 days idle → dropped; rejoin → row fresh.
+
+---
+
+## OC-15 contract (this repo)
+
+Per-user MOMENT, same Open Cloud API as v1. **Not** Experience Updates, **not** all Notify-bell CCU.
+
+| Decision | Value |
+| --- | --- |
+| Who | **Lot alumni** — anyone who has **ever claimed a lot** in that universe (current or former). Not CCU. |
+| Recency | `updatedUnix >= nowUnix − 14 × 86400` |
+| Re-add | Dormant alumni who **join again** (e.g. after 2 months) get a fresh `updatedUnix` from TCG and re-enter the 14-day window. They do **not** need to claim a lot again. |
+| Store | Standard DataStore `CollectorNotify` **in that universe**. Key = `tostring(userId)`. Value **must** include `updatedUnix`. Do **not** key by `lotId` (lots are reused; MOMENT is per user). `lotId` in the value is optional debug only — not used to send. |
+| List vs send | List/filter **outside** the 60s window; cache userIds (sqlite). Window is HTTP only. |
+| Missing store | Fall back to allowlist. Do not invent recipients. Empty audience ⇒ no HTTP. |
+| Live gate | `LIVE_SENDS_ENABLED=true` still required. First Live datastore run: confirm `audienceN` is alumni-scale, not CCU. |
+| Key | Separate from notifications and snapshot: `ROBLOX_API_KEY_LIVE_DATASTORE` with `universe-datastores.objects:list` + `:read` on Live `6674250544`. Optional Sandbox twin. |
+| Scale | Sequential POSTs. Shared 16:00 with Sandbox. Budget ~400 users / 60s at ~100ms each; time-budget sandbox or split processes if Live would miss the window. |
+| Logs | `audienceN`, `storeListedN`, `recencyDroppedN`, `source=datastore\|allowlist`. |
+
+Released owners stay eligible for **14 days after release** (TCG touches `updatedUnix` on release). Current offline owners are included. In-server owners still get TCG toast at T−2; at most one MOMENT that UTC day.
 
 ---
 
@@ -60,13 +85,16 @@ Not required to start Sandbox allowlist testing. Needed before Live blast. Imple
 
 | ID | P | Item | Notes |
 | --- | --- | --- | --- |
-| TCG-OC-01 | P1 | Creator Dashboard | Enable experience notifications + create the notification string on **both** universes. Put asset ids in this controller’s **env**, not in TCG git. |
-| TCG-OC-02 | P1 | Owner DataStore | Write eligible owners when a lot is claimed / released (`PropertyManager` claim path). Suggested name `CollectorNotify`, keys `userId` strings, value `{ lotId, updatedUnix }`. **Does not exist today.** Exact name TBD. |
-| TCG-OC-03 | P1 | `PromptOptIn()` | `ExperienceNotificationService:PromptOptIn()` for 13+ shop owners so MOMENT can deliver. |
+| TCG-OC-01 | P1 | Creator Dashboard | Enable experience notifications + notification string on **both** universes. Put asset ids in this controller’s **env**. For OC-19: body says **10 minutes** (edit string or new id). |
+| TCG-OC-02 | P1 | `CollectorNotify` DataStore | Standard DataStore per universe, name **`CollectorNotify`**. Key = `tostring(userId)` (**not** `lotId`). Upsert `updatedUnix` on **claim**, **release** (keep the key; do not delete), and **join** if `EverOwnedLot`. At most one write per session. Skip Studio Play. **Does not exist today.** Blocks OC-15. |
+| TCG-OC-03 | P1 | `PromptOptIn()` What's New | `2026-09-10-01` already prompts 13+; card **expires 2026-10-10**. Not enough for Live alumni. |
+| TCG-OC-03b | P1 | Durable `PromptOptIn` on first claim | Client `CanPromptOptInAsync` + `PromptOptIn()` after first successful claim (13+). Do not block claim if dismissed. |
 | TCG-OC-04 | P2 | `launch_data` analytics | Read `collector:<slotKey>` on join for analytics only. **Do not spawn from it.** |
 | TCG-OC-05 | P2 | Next-slot UI | Surface next Collector time in the shop HUD (game clock, not this service). |
 | TCG-OC-06 | P2 | Do **not** “fix” `hash32` to uint32 mul | Luau double multiply **is** the live clock (jitter 433 for `2026-09-10T16`). Changing it would move spawn times. If TCG ever changes hash, this controller follows. |
 | TCG-OC-07 | P2 | Patch TCG spec §2 | `COLLECTOR_OPEN_CLOUD_NOTIFICATIONS.md` says “Multiplication is mod 2^32.” Replace with “IEEE-754 multiply, then `% 2^32` (not uint32 wrap)” so implementers do not ship jitter 237. |
+| TCG-OC-08 | P1 | ProfileStore `EverOwnedLot` | `Template.lua`: `EverOwnedLot = false`. Set `true` on first successful claim; **never clear** on release. Join path uses this to re-touch `CollectorNotify` after months away. Blocks OC-15 re-add. |
+| TCG-OC-09 | P1 | `PushLeadSeconds` 10 min | `NPCConfig.lua` `COLLECTOR.PushLeadSeconds`: `8 * 60` → `10 * 60`. Spec copy 8 → 10. Do **not** change jitter, toast, catch, or `VisitHoursUtc`. Pair with OC-19. |
 
 ---
 
@@ -75,7 +103,9 @@ Not required to start Sandbox allowlist testing. Needed before Live blast. Imple
 - SMS / email / Discord
 - MessagingService as offline notify
 - Studio Play notifications
-- Blasting all Live CCU
+- Blasting all Live CCU / all Notify-bell players
+- Experience Updates (3-day game-update blast) as a Collector ping
+- Keying `CollectorNotify` by `lotId`
 - Widening the 60s send window
 - Changing TCG `slotUnix`
 - A general-purpose Open Cloud SDK

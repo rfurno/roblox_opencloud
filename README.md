@@ -9,7 +9,7 @@ The TCG game only toasts players already in a running server (T−2 min). Arriva
 - Game repo (private): [rfurno/roblox_gacha](https://github.com/rfurno/roblox_gacha)
 - Spec: `roblox_gacha/docs/COLLECTOR_OPEN_CLOUD_NOTIFICATIONS.md`
 
-**Status (2026-09-12):** Local scheduler + dashboard (Collector + Snapshots tabs). MOMENT dry-run by default. Do not send Live notifications. Daily Live snapshot is independent of `DRY_RUN` (needs `ROBLOX_API_KEY_LIVE_SNAPSHOT`).
+**Status (2026-09-13):** Local scheduler + dashboard (Collector + Snapshots tabs). MOMENT dry-run by default. Do not send Live notifications. Daily Live snapshot is independent of `DRY_RUN` (needs `ROBLOX_API_KEY_LIVE_SNAPSHOT`). Planned: 10 min lead (OC-19) and 14-day lot-alumni DataStore audience (OC-15; blocked on TCG).
 
 ## Run locally
 
@@ -35,8 +35,8 @@ Secrets stay in `.env` (gitignored). MOMENT dry-run does not need notification k
 | This service does | This service does not |
 | --- | --- |
 | Recompute TCG Collector `slotKey` / `slotUnix` | Spawn NPCs or write TCG ProfileStore |
-| POST Open Cloud MOMENT at `slotUnix − 480s` for **notify hours** | Send in-game `COLLECTOR_INCOMING` toasts |
-| Allowlist (Sandbox first); Live notify hour **16** only | Blast all Live players; spend the 1/day cap on 04:00 UTC |
+| POST Open Cloud MOMENT at `slotUnix − 480s` (OC-19: −600s) for **notify hours** | Send in-game `COLLECTOR_INCOMING` toasts |
+| Allowlist (Sandbox first); later 14-day lot alumni (OC-15); Live notify hour **16** only | Blast all Live CCU / Notify-bell; spend the 1/day cap on 04:00 UTC |
 | Persist an idempotent send ledger under `./data` | Use MessagingService as offline notify |
 | POST one Live DataStore snapshot per UTC day | Download a dump, list Roblox snapshots, or restore keys |
 | Run when CCU is 0, if this process is up | Notify Studio Play `studio:<index>` slots |
@@ -53,12 +53,12 @@ Secrets stay in `.env` (gitignored). MOMENT dry-run does not need notification k
 
 | Event | When |
 | --- | --- |
-| Open Cloud MOMENT | `slotUnix − 480s` (8 min), window 60s, notify hours only |
+| Open Cloud MOMENT | `slotUnix − 480s` (8 min, v1), window 60s, notify hours only. **OC-19:** −600s (10 min) |
 | Live DataStore snapshot | First 30s tick of the UTC day with a snapshot key set; skips Collector send windows; 1/UTC day |
 | In-game toast | `slotUnix − 120s` — **game only** |
 | Collector spawn | `slotUnix` — **game only** |
 
-Worked example `2026-09-10T16`: jitter **+433s**, spawn **16:07:13Z**, send **15:59:13Z**.
+Worked example `2026-09-10T16`: jitter **+433s**, spawn **16:07:13Z**, send **15:59:13Z** (v1). OC-19 send **15:57:13Z**.
 
 ## Docs
 
