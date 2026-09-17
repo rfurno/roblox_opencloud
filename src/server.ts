@@ -54,9 +54,14 @@ export function enqueueAudience(cfg: AppConfig): Promise<void> {
 
 async function schedulerLoop(cfg: AppConfig): Promise<void> {
   while (running) {
-    await enqueueAudience(cfg);
-    await enqueueTick(cfg);
-    await enqueueSnapshots(cfg);
+    try {
+      await enqueueAudience(cfg);
+      await enqueueTick(cfg);
+      await enqueueSnapshots(cfg);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.error(JSON.stringify({ event: "tick_error", error: message.slice(0, 300) }));
+    }
     const wait = msUntilNextBoundary(Date.now(), cfg.schedule.tickIntervalSeconds);
     await new Promise((r) => setTimeout(r, wait));
   }

@@ -167,6 +167,40 @@ describe("worker tick", () => {
     ledger.close();
   });
 
+  it("retryable network (status 0) leaves pending for the next tick", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "oc-"));
+    writeFileSync(join(dir, "empty.json"), JSON.stringify({ userIds: [] }));
+    const allowlistPath = writeAllowlist(dir, [555]);
+    const cfg = cfgFor(dir, allowlistPath);
+    const ledger = new Ledger(":memory:");
+    const calls: number[] = [];
+    await tick(cfg, {
+      nowUnix: PUSH_AT,
+      dryRun: false,
+      universes: ["sandbox"],
+      ledgers: { sandbox: ledger },
+      send: async () => {
+        calls.push(1);
+        return { status: 0, body: "fetch failed: read ECONNRESET (ECONNRESET)" };
+      },
+    });
+    expect(calls).toEqual([1]);
+    expect(ledger.get("7034342160", "2026-09-10T16", 555)?.status).toBe("pending");
+    await tick(cfg, {
+      nowUnix: PUSH_AT,
+      dryRun: false,
+      universes: ["sandbox"],
+      ledgers: { sandbox: ledger },
+      send: async () => {
+        calls.push(1);
+        return { status: 200, body: "{}" };
+      },
+    });
+    expect(calls).toEqual([1, 1]);
+    expect(ledger.get("7034342160", "2026-09-10T16", 555)?.status).toBe("sent");
+    ledger.close();
+  });
+
   it("pending + closed window does not POST", async () => {
     const dir = mkdtempSync(join(tmpdir(), "oc-"));
     writeFileSync(join(dir, "empty.json"), JSON.stringify({ userIds: [] }));

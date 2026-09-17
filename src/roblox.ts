@@ -33,6 +33,31 @@ export function momentPayload(req: MomentRequest): unknown {
   };
 }
 
+function formatFetchError(err: unknown): string {
+  if (!(err instanceof Error)) return String(err);
+  const parts = [err.message];
+  const cause = err.cause;
+  if (cause instanceof Error) {
+    const code =
+      "code" in cause && typeof (cause as { code?: unknown }).code === "string"
+        ? (cause as { code: string }).code
+        : "";
+    parts.push(code ? `${cause.message} (${code})` : cause.message);
+  }
+  return parts.filter(Boolean).join(": ").slice(0, 300);
+}
+
+/** Network resets (ECONNRESET, etc.) must not throw. status 0 is retryable. */
+async function fetchText(url: string, init?: RequestInit): Promise<{ status: number; body: string }> {
+  try {
+    const res = await fetch(url, init);
+    const body = await res.text();
+    return { status: res.status, body };
+  } catch (err) {
+    return { status: 0, body: formatFetchError(err) };
+  }
+}
+
 export async function sendMoment(req: MomentRequest): Promise<MomentResult> {
   if (!req.apiKey) {
     return { status: 0, body: "missing api key" };
@@ -46,7 +71,7 @@ export async function sendMoment(req: MomentRequest): Promise<MomentResult> {
     return { status: 0, body: "universe mismatch" };
   }
 
-  const res = await fetch(notificationUrl(req.userId), {
+  return fetchText(notificationUrl(req.userId), {
     method: "POST",
     headers: {
       "x-api-key": req.apiKey,
@@ -54,8 +79,6 @@ export async function sendMoment(req: MomentRequest): Promise<MomentResult> {
     },
     body: JSON.stringify(payload),
   });
-  const body = await res.text();
-  return { status: res.status, body };
 }
 
 export function isRetryable(status: number): boolean {
@@ -186,12 +209,12 @@ export async function listDataStoreEntries(req: {
   pageToken?: string;
 }): Promise<ListEntriesResult> {
   if (!req.apiKey) return { status: 0, body: "missing api key", entries: [], nextPageToken: null };
-  const res = await fetch(listDataStoreEntriesUrl(req.universeId, req.storeId, req.pageToken), {
-    headers: { "x-api-key": req.apiKey },
-  });
-  const body = await res.text();
+  const { status, body } = await fetchText(
+    listDataStoreEntriesUrl(req.universeId, req.storeId, req.pageToken),
+    { headers: { "x-api-key": req.apiKey } },
+  );
   const parsed = parseListedEntries(body);
-  return { status: res.status, body, ...parsed };
+  return { status, body, ...parsed };
 }
 
 export async function getDataStoreEntry(req: {
@@ -199,11 +222,10 @@ export async function getDataStoreEntry(req: {
   path: string;
 }): Promise<GetEntryResult> {
   if (!req.apiKey) return { status: 0, body: "missing api key", value: null };
-  const res = await fetch(dataStoreEntryUrl(req.path), {
+  const { status, body } = await fetchText(dataStoreEntryUrl(req.path), {
     headers: { "x-api-key": req.apiKey },
   });
-  const body = await res.text();
-  return { status: res.status, body, value: parseEntryValue(body) };
+  return { status, body, value: parseEntryValue(body) };
 }
 
 export function snapshotUrl(universeId: string): string {
@@ -238,7 +260,7 @@ export async function snapshotDataStores(req: SnapshotRequest): Promise<Snapshot
     return { status: 0, body: "missing universe id", newSnapshotTaken: null, latestSnapshotTime: null };
   }
 
-  const res = await fetch(snapshotUrl(req.universeId), {
+  const { status, body } = await fetchText(snapshotUrl(req.universeId), {
     method: "POST",
     headers: {
       "x-api-key": req.apiKey,
@@ -246,7 +268,6 @@ export async function snapshotDataStores(req: SnapshotRequest): Promise<Snapshot
     },
     body: "{}",
   });
-  const body = await res.text();
   const parsed = parseSnapshotBody(body);
-  return { status: res.status, body, ...parsed };
+  return { status, body, ...parsed };
 }
