@@ -114,7 +114,7 @@ function renderJob(name, job, data) {
       data.keysConfigured.sandbox && data.messageConfigured.sandbox && job.allowlistN > 0;
     sendBtn.disabled = !ready || sendingSandbox;
     sendBtn.title = ready
-      ? "Bypass the send window. Counts as this user’s one MOMENT for the UTC day."
+      ? "Bypass the send window. Counts as this user’s one MOMENT for the UTC week."
       : "Need Sandbox API key, message_id, and a non-empty allowlist (restart npm start after .env changes).";
     sendBtn.addEventListener("click", () => sendSandboxNow(sendBtn, job.allowlistN));
     row.append(sendBtn);
@@ -122,7 +122,7 @@ function renderJob(name, job, data) {
     const hint = document.createElement("p");
     hint.className = "hint";
     hint.textContent = ready
-      ? "Ignores DRY_RUN and the 10-minute window. Does not spawn The Collector. Uses this UTC day’s one MOMENT (Roblox limit)."
+      ? "Ignores DRY_RUN and the 10-minute window. Does not spawn The Collector. Uses this UTC week’s one MOMENT (Monday–Sunday). Later sends this week are skipped."
       : sendBtn.title;
     card.append(hint);
   }
@@ -316,7 +316,7 @@ async function takeSnapshot(name, label) {
 
 async function sendSandboxNow(btn, allowlistN) {
   const ok = window.confirm(
-    `Send a Sandbox MOMENT now to ${allowlistN} allowlisted user(s)?\n\nThis does not wait for The Collector clock and does not spawn the NPC. Roblox allows one experience notification per user per UTC day, so a later scheduled send today will be skipped.`,
+    `Send a Sandbox MOMENT now to ${allowlistN} allowlisted user(s)?\n\nThis does not wait for The Collector clock and does not spawn the NPC. Each user gets at most one MOMENT per UTC week (Monday–Sunday), so a later scheduled send this week will be skipped.`,
   );
   if (!ok) return;
   sendingSandbox = true;

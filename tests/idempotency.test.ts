@@ -2,6 +2,7 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { clockSlotsNear } from "../src/clock.ts";
 import type { AppConfig } from "../src/config.ts";
 import { Ledger } from "../src/store.ts";
 import { sendSandboxNow, tick } from "../src/worker.ts";
@@ -86,9 +87,26 @@ describe("ledger", () => {
       }),
     ).toBe(false);
     expect(ledger.get(row.universe_id, row.slot_key, row.user_id)?.status).toBe("sent");
+    expect(ledger.hasMomentBetween(row.universe_id, row.user_id, "2026-09-07", "2026-09-13")).toBe(
+      true,
+    );
+    expect(ledger.hasMomentBetween(row.universe_id, row.user_id, "2026-09-14", "2026-09-20")).toBe(
+      false,
+    );
     ledger.close();
   });
 });
+
+function pushAtFor(key: string, nearUnix: number): number {
+  const slot = clockSlotsNear(nearUnix, {
+    timeZone: "Etc/UTC",
+    hoursLocal: [4, 10, 16, 22],
+    jitterSeconds: 600,
+    pushLeadSeconds: 600,
+  }).find((candidate) => candidate.key === key);
+  if (!slot) throw new Error(`missing slot ${key}`);
+  return slot.pushAt;
+}
 
 describe("worker tick", () => {
   it("dry-run writes nothing, then a live tick still POSTs", async () => {
@@ -252,10 +270,43 @@ describe("worker tick", () => {
     expect(universes).not.toContain("6674250544");
     ledger.close();
   });
+
+  it("sends one MOMENT per UTC ISO week, then again the next week", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "oc-"));
+    writeFileSync(join(dir, "empty.json"), JSON.stringify({ userIds: [] }));
+    const allowlistPath = writeAllowlist(dir, [777]);
+    const cfg = cfgFor(dir, allowlistPath);
+    const ledger = new Ledger(":memory:");
+    const calls: string[] = [];
+    const send = async (req: { slotKey: string }) => {
+      calls.push(req.slotKey);
+      return { status: 200, body: "{}" };
+    };
+    const opts = {
+      dryRun: false as const,
+      universes: ["sandbox"] as const,
+      ledgers: { sandbox: ledger },
+      send,
+    };
+
+    await tick(cfg, { ...opts, nowUnix: PUSH_AT });
+    expect(calls).toEqual(["2026-09-10T16"]);
+
+    const fridayPush = pushAtFor("2026-09-11T16", PUSH_AT + 86_400);
+    await tick(cfg, { ...opts, nowUnix: fridayPush });
+    expect(calls).toEqual(["2026-09-10T16"]);
+    expect(ledger.hasMomentToday("7034342160", 777, "2026-09-11")).toBe(false);
+
+    const nextWeekPush = pushAtFor("2026-09-17T16", PUSH_AT + 7 * 86_400);
+    await tick(cfg, { ...opts, nowUnix: nextWeekPush });
+    expect(calls).toEqual(["2026-09-10T16", "2026-09-17T16"]);
+    expect(ledger.hasMomentBetween("7034342160", 777, "2026-09-14", "2026-09-20")).toBe(true);
+    ledger.close();
+  });
 });
 
 describe("manual sandbox send", () => {
-  it("POSTs outside the send window and records the UTC-day cap", async () => {
+  it("POSTs outside the send window and records the UTC-week cap", async () => {
     const dir = mkdtempSync(join(tmpdir(), "oc-"));
     writeFileSync(join(dir, "empty.json"), JSON.stringify({ userIds: [] }));
     const allowlistPath = writeAllowlist(dir, [3757284903]);

@@ -11,7 +11,7 @@ caffeinate -i npm start # macOS: stay awake
 
 Dashboard: `http://127.0.0.1:3848`. Bind is loopback. **One `npm start`.** A second copy exits `listen EADDRINUSE 127.0.0.1:3848` — `lsof -nP -iTCP:3848 -sTCP:LISTEN` then kill that PID (and its `npm start` parent). Tabs: **Collector** | **Snapshots**. Collector cards: **Will notify N · CollectorNotify / EverOwnedLot M · older than 14 days K**. **Tick now** is MOMENT dry-run only. **Take snapshot now** POSTs Open Cloud (one per UTC day).
 
-**If this process is not running at `pushAt`, that is a missed MOMENT.** If it is down for a whole UTC day, that is a missed Live snapshot. Do not close the lid through a send window. First `source=datastore` Live send: next **16:00 UTC** notify (`pushAt` ~15:50). Sandbox later hours the same UTC day are silent if 04:00 already spent the 1/day cap.
+**If this process is not running at `pushAt`, that is a missed MOMENT.** If it is down for a whole UTC day, that is a missed Live snapshot. Do not close the lid through a send window. First `source=datastore` Live send: next **16:00 UTC** notify (`pushAt` ~15:50) that has not already sent this ISO week. Sandbox later hours that week are silent if an earlier notify hour already sent.
 
 ---
 
@@ -24,9 +24,9 @@ Dashboard: `http://127.0.0.1:3848`. Bind is loopback. **One `npm start`.** A sec
 
 Never paste a Live key into a Sandbox curl, or the reverse. Never put the snapshot key in `ROBLOX_API_KEY_LIVE` (wrong scope).
 
-`LIVE_SENDS_ENABLED` defaults **false**. Live `notifyHoursLocal: [16]` so the 1/day cap is not spent on 04:00 UTC (01:00 Brazil). TCG still spawns at 04.
+`LIVE_SENDS_ENABLED` defaults **false**. Live `notifyHoursLocal: [16]` so the weekly MOMENT is not spent on 04:00 UTC (01:00 Brazil). TCG still spawns at 04.
 
-Sandbox 1/day cap: arm `DRY_RUN=false` only for a user who has **not** received a MOMENT this UTC day, **shortly before the target hour**. If the machine was live at 04:00, 10/16/22 are silent that UTC day.
+Weekly cap: arm `DRY_RUN=false` only for a user who has **not** received a MOMENT this UTC ISO week (Monday–Sunday), **shortly before the target hour**. If the machine already sent at 04:00, later Sandbox hours that week are silent. A missed 60s window can still send on the next notify slot of that week.
 
 Live and Sandbox **share the 16:00 UTC send window** (same `slotKey` → same jitter). v1 runs sandbox then live sequentially.
 
@@ -123,9 +123,9 @@ Do not commit real keys or real message ids. **Do not put `ROBLOX_API_KEY_*` in 
 6. **Visit count (OC-13 blocker):** Creator Hub → the experience → Analytics / the public experience page. Confirm **≥100 visits**. If Sandbox is under 100, OC-13 is **blocked** — MOMENT sends will fail eligibility. Play-test Sandbox until the counter clears 100; do not assume the worker is broken.
 7. Recipients must be 13+ and have the experience **Notify** bell on. What's New `PromptOptIn` expires **2026-10-10**; durable prompt is after FTUE (TCG-OC-03b, **published**). Operators can still opt in from the experience page.
 
-**Dashboard:** Collector tab → Sandbox **Send notification now**. Bypasses `DRY_RUN` and the send-lead window. Live has no such button. Snapshots tab → **Take snapshot now** (real HTTP; 1/UTC day). Restart `npm start` after `.env` changes. MOMENT writes `moment_days` (Roblox 1/day cap), so a later scheduled send that UTC day is skipped.
+**Dashboard:** Collector tab → Sandbox **Send notification now**. Bypasses `DRY_RUN` and the send-lead window. Live has no such button. Snapshots tab → **Take snapshot now** (real HTTP; 1/UTC day). Restart `npm start` after `.env` changes. MOMENT writes `moment_days`, so a later scheduled send that UTC ISO week is skipped. Roblox still allows only one experience notification per user per UTC day.
 
-Manual curl (off-clock Stage-2 probe; burns that user’s UTC-day cap):
+Manual curl (off-clock Stage-2 probe; burns that user’s UTC-week cap):
 
 ```bash
 curl -sS -X POST "https://apis.roblox.com/cloud/v2/users/${USER_ID}/notifications" \
@@ -301,14 +301,14 @@ Log line must contain `slotKey` (or the next upcoming **notify** key), `slotUnix
 | Sandbox **≥100 visits** | Creator Hub Analytics / experience page. If under 100, **stop** — OC-13 blocked |
 | Allowlisted user 13+ and Notify-bell on | Experience page bell; userId in `config/allowlist.sandbox.json` |
 | Clock golden still 433 | `npm test` (after PR-1) or Studio snippet above |
-| No MOMENT yet this UTC day for that user | `moment_days` empty / first send of the day |
+| No MOMENT yet this UTC week for that user | `moment_days` has no row for that user from Monday through Sunday UTC |
 | Target hour chosen | Set `notifyHoursLocal` to **that one hour**, or arm sends only in the ~15 min before its `pushAt` |
 | `DRY_RUN=false` armed only for that window | `fly secrets set DRY_RUN=false` shortly before `pushAt`; set `true` after |
 | Worker after PR-4 | `fly status` is **started** |
 
 Then:
 
-1. Wait for that hour’s send window (hour UTC minus ~10 min, ±10 min jitter). Do **not** “wait for the next Sandbox hour” if an earlier hour already sent today.
+1. Wait for that hour’s send window (hour UTC minus ~10 min, ±10 min jitter). Do **not** “wait for the next Sandbox hour” if an earlier hour already sent this UTC week.
 2. Notification Center should show “The Collector…” ~10 minutes before TCG spawn.
 3. Join before `slotUnix` with a claimed lot → Collector still spawns from the **game**.
 4. Ignore a later slot and join after `slotUnix + 600` → **no** spawn (game).
@@ -333,9 +333,9 @@ PR-5 only **commits** team userIds. Flipping `DRY_RUN=false` is this ops step, n
 | Notify at wrong time vs TCG | `Math.imul` / spec “mod 2^32” or host TZ | Golden `2026-09-10T16` must be **433**. Revert deploy |
 | 04:00 UTC ping / 16:00 silent on Live | `notifyHoursLocal` includes 4 (or Brazil `[1]`) | Live `Etc/UTC` notify `[16]` only; Sao Paulo notify `[13]` |
 | Zero Live MOMENTs after switching zone to Sao Paulo | `notifyHoursLocal` still `[16]` while `hoursLocal` is `[13, 1]` | Set `notifyHoursLocal: [13]` (same zone as `hoursLocal`) |
-| Sandbox 10/16/22 silent | 04:00 already spent 1/day cap | Expected. Arm `DRY_RUN=false` only before the target hour |
+| Sandbox 10/16/22 silent | An earlier slot this ISO week already sent | Expected. Next chance is the next notify slot with no `moment_days` row that week |
 | Sandbox users get Live universe | Job mixup | Stop immediately. Rotate **both** keys |
-| Live blast scare | `LIVE_SENDS_ENABLED` + non-empty list | `LIVE_SENDS_ENABLED=false` / `DRY_RUN=true`. Roblox 1/day limits damage |
+| Live blast scare | `LIVE_SENDS_ENABLED` + non-empty list | `LIVE_SENDS_ENABLED=false` / `DRY_RUN=true`. The weekly cap and Roblox’s 1/day limit both bound repeats |
 | Key 403 from Fly, works on laptop | Roblox key IP-allowlisted | Remove IP allowlist or pin dedicated egress |
 | Snapshots tab: Live snapshot key missing | `ROBLOX_API_KEY_LIVE_SNAPSHOT` unset / placeholder | Put the `universe-datastores.control:snapshot` key in `.env`, restart |
 | Snapshot 403 | Notifications key used, or wrong universe | Separate snapshot env var; Live universe `6674250544` only |

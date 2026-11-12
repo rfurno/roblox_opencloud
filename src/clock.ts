@@ -38,6 +38,29 @@ export function utcDateFromUnix(unix: number): string {
   return `${dt.year}-${pad2(dt.month)}-${pad2(dt.day)}`;
 }
 
+export type UtcIsoWeek = {
+  /** ISO week, Monday–Sunday UTC, e.g. `2026-W37`. */
+  weekKey: string;
+  /** Inclusive UTC date `YYYY-MM-DD` of Monday. */
+  startDate: string;
+  /** Inclusive UTC date `YYYY-MM-DD` of Sunday. */
+  endDate: string;
+};
+
+/** ISO week containing `unix`. Monday 00:00 UTC through Sunday, not a rolling 7 days. */
+export function utcIsoWeekFromUnix(unix: number): UtcIsoWeek {
+  const dt = DateTime.fromSeconds(unix, { zone: "utc" });
+  const start = dt.startOf("day").minus({ days: dt.weekday - 1 });
+  const end = start.plus({ days: 6 });
+  const dateOf = (value: DateTime): string =>
+    `${value.year}-${pad2(value.month)}-${pad2(value.day)}`;
+  return {
+    weekKey: `${start.weekYear}-W${pad2(start.weekNumber)}`,
+    startDate: dateOf(start),
+    endDate: dateOf(end),
+  };
+}
+
 export function formatUtc(unix: number): string {
   return DateTime.fromSeconds(unix, { zone: "utc" }).toFormat("yyyy-LL-dd HH:mm:ss") + "Z";
 }

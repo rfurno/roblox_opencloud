@@ -337,7 +337,7 @@ Sandbox published place, not Studio Play, unless noted.
 | `launch_data` (if TCG-OC-04) | Analytics only. Join after catch window → no spawn. |
 | Spec §2 | No “mod 2^32” as uint32 wrap. Golden 433 documented. |
 
-Controller-side checks after this lands (not TCG): Sandbox allowlist MOMENT in Notification Center ~10 min before spawn; later, list `CollectorNotify` (paginate; do not assume a small keyspace) and only ping ids in the 14-day window. Live notify hours stay **16 only** (Roblox one MOMENT per UTC day). 04:00 UTC still spawns for whoever is in-server; they do not get an offline ping.
+Controller-side checks after this lands (not TCG): Sandbox allowlist MOMENT in Notification Center ~10 min before spawn; later, list `CollectorNotify` (paginate; do not assume a small keyspace) and only ping ids in the 14-day window. Live notify hours stay **16 only**, and each user gets at most one MOMENT per UTC ISO week. Roblox still allows one per UTC day. 04:00 UTC still spawns for whoever is in-server; they do not get an offline ping.
 
 ---
 

@@ -101,7 +101,7 @@ flowchart TD
   aud --> gated{"empty list or Live gated off?"}
   gated -->|yes| skipAud["Log, no HTTP"]
   gated -->|no| users["Each userId sequential"]
-  users --> day{"MOMENT already this UTC day?"}
+  users --> day{"MOMENT already this UTC ISO week?"}
   day -->|yes| skipDay["Skip user"]
   day -->|no| res["INSERT OR IGNORE pending"]
   res --> sel["SELECT status"]
@@ -109,7 +109,7 @@ flowchart TD
   sel -->|"pending, window open"| post["POST Open Cloud MOMENT"]
   sel -->|"pending, window closed"| skipClosed["No HTTP"]
   post --> ok{"HTTP"}
-  ok -->|"2xx"| persist["Mark sent + utc_day"]
+  ok -->|"2xx"| persist["Mark sent + utc_date"]
   ok -->|"400 / 403 / 404"| fail["Mark failed, no retry"]
   ok -->|"429 / 5xx / crash"| leave["Leave pending"]
   jobs --> snapWin{"Collector notify window open?"}
@@ -134,7 +134,7 @@ sequenceDiagram
   Tick->>Clock: now Unix UTC
   Clock-->>Tick: slots with key, slotUnix, pushAt
   Tick->>Tick: filter send window, drop studio:
-  Tick->>Store: moment_days this UTC day?
+  Tick->>Store: moment_days this UTC ISO week?
   Store-->>Tick: no
   Tick->>Store: INSERT OR IGNORE pending; SELECT
   Store-->>Tick: pending and window open
@@ -238,7 +238,7 @@ Scheduled snapshots **skip** while any Collector **notify** slot is in its 60s s
 
 A slot is eligible to **send** iff the **`hoursLocal` hour used to build that slot** is in `notifyHoursLocal` **and** `now ∈ [slotUnix - pushLead, slotUnix - pushLead + 60)`. `pushLead` = **600**. `notifyHoursLocal` ⊆ `hoursLocal` in the **same** IANA zone — not a second UTC conversion, not `slotKey`’s UTC hour unless the zone is `Etc/UTC`. Visit hours still compute every TCG slot. If `pushAt` is past, **skip**. Do not send in the toast window or after spawn.
 
-**Live `Etc/UTC` `notifyHoursLocal: [16]`** so the 1/day cap is not spent on 04:00 UTC (01:00 Brazil). TCG still spawns at 04. Brazil equivalent: `America/Sao_Paulo`, `hoursLocal: [13, 1]`, **`notifyHoursLocal: [13]`** → send only 16:00Z. Keeping `[16]` in that zone matches no generating hour → zero Live MOMENTs. Golden: after a 04:00 send, 16:00 is skipped; with notify `[16]` under `Etc/UTC`, 04:00 is computed but not sent; Sao Paulo `[13, 1]` + notify `[13]` → send only 16:00Z.
+**Live `Etc/UTC` `notifyHoursLocal: [16]`** so the weekly MOMENT is not spent on 04:00 UTC (01:00 Brazil). TCG still spawns at 04. Brazil equivalent: `America/Sao_Paulo`, `hoursLocal: [13, 1]`, **`notifyHoursLocal: [13]`** → send only 16:00Z. Keeping `[16]` in that zone matches no generating hour → zero Live MOMENTs. After a successful send, later notify slots that ISO week (Monday–Sunday UTC) are skipped. With notify `[16]` under `Etc/UTC`, 04:00 is computed but not sent; Sao Paulo `[13, 1]` + notify `[13]` → send only 16:00Z.
 
 **Shared 16:00 window:** jitter hashes `slotKey` only. Live and Sandbox `2026-09-10T16` share `slotUnix` `1789056433` and the same 60s window. v1: sequential sandbox then live **inside one** `await tick()`, tens of ids. v2: time-budget sandbox (~20s) or split Fly processes if DataStore audience would burn the window.
 
@@ -456,13 +456,13 @@ CREATE TABLE snapshots (
 
 2xx → `UPDATE … SET status='sent' WHERE status='pending'` then `moment_days`. 400/403/404 → `failed` **only if still `pending`** (must not overwrite `sent`). 429/5xx/crash → leave `pending`; no in-tick backoff. Dry-run never inserts. Tests: two overlapping ticks → one HTTP; 2xx then 4xx does not overwrite `sent`.
 
-`utc_date` is the UTC calendar date of **send time**. Enforces Roblox’s one MOMENT per user per **UTC day** (not host local). **Confirmed 2026-09-10 (user).** Live still uses `notifyHoursLocal: [16]` so 04:00 never spends that row.
+`utc_date` is the UTC calendar date of **send time**. A user is skipped when any `moment_days` row for that universe falls in the same **ISO week** (Monday 00:00 UTC through Sunday). Roblox still allows one MOMENT per UTC day; this ledger is stricter. Live still uses `notifyHoursLocal: [16]` so 04:00 never spends the weekly row.
 
 `snapshots.utc_date` is the UTC calendar date of the snapshot POST. Unique `(universe_id, utc_date)`. 429/5xx do not insert, so the next tick retries. `new_snapshot_taken = 0` still counts as the day’s row (Roblox already had a snapshot that UTC day).
 
 No `tick_log` table — stdout JSON only (MOMENT ticks plus `{ "event": "snapshot", ... }`).
 
-Ledger growth: O(users × notify slots) plus 1 snapshot row per universe per UTC day. Tiny at allowlist scale.
+Ledger growth: O(users × weeks) for MOMENTs plus 1 snapshot row per universe per UTC day. Tiny at allowlist scale.
 
 ---
 
@@ -511,7 +511,7 @@ primary_region = "iad"
 
 Image `CMD` is `node dist/index.js` (no `[processes]` worker group — `fly deploy` targets the default process). Volume is exclusive-mount: second replica **fails closed**. Do not deploy in the **15 minutes around `pushAt`**. Single replica; do not `fly scale count` above 1.
 
-Load: Live **1 notify** slot/day (16) + Sandbox up to 4 (1/day cap per user); tens of POSTs; sequential. Shared 16:00 window across universes.
+Load: Live **1 notify** slot/day (16) + Sandbox up to 4 on the clock, capped at one MOMENT per user per ISO week; tens of POSTs; sequential. Shared 16:00 window across universes.
 
 ---
 
@@ -546,7 +546,7 @@ How to verify a slot against TCG: [OPERATIONS.md](OPERATIONS.md).
 | Missed 60s window (`http_service` autostop, deploy) | High | No HTTP service; wall-clock 30s; deploy freeze 15 min around `pushAt`; `fly status` stopped = P0 |
 | Live/Sandbox key mixup | High | Typed job; tests; rotate |
 | Shared 16:00 window | Med | v1 sequential; v2 time-budget or split |
-| 1/day cap on 04:00 UTC | High if unfixed | Live `notifyHoursLocal: [16]` |
+| Weekly MOMENT spent on 04:00 UTC | High if unfixed | Live `notifyHoursLocal: [16]` |
 | Nobody opted in (403) | Med | Expected until TCG `PromptOptIn` (What's New expires 2026-10-10; need TCG-OC-03b on claim) |
 | DataStore list inside 60s window | High if unfixed | OC-15: 15 min cache; skip list in the 60s window; window is POST only |
 | Second `npm start` | Low | `EADDRINUSE` on 3848; run one process |

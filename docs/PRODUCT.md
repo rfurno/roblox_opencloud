@@ -59,11 +59,11 @@ v1 is an allowlist of tens of userIds, not CCU. Metrics are operational, not van
 | Offline delivery | Opted-in alumni (v1: allowlisted user) sees the item in Notification Center (OS push is **not** guaranteed) |
 | No late send | If the 60s window is missed, skip. No toast-window or post-spawn MOMENT |
 | Idempotency | Re-running the job does not double-send; unique `(universe, slot, user)` |
-| Cap | At most one MOMENT per user per **UTC day** per universe (Roblox; **confirmed 2026-09-10**). Live sends **16:00 UTC only** (`notifyHoursLocal`); 04:00 is computed for clock tests but not sent |
+| Cap | At most one MOMENT per user per **UTC ISO week** (Monday–Sunday) per universe. The first successful notify window of that week sends; later windows that week are skipped. A missed 60s window does not send late, and the next notify slot in the same week still can. Roblox still allows one per UTC day |
 | Isolation | Sandbox HTTP never uses universe `6674250544` |
-| Live notify hour | MOMENT spends the 1/day cap on **16:00 UTC** (13:00 Brazil), not 04:00 UTC (01:00 Brazil). TCG still spawns at 04 |
+| Live notify hour | The weekly MOMENT is the **16:00 UTC** visit (13:00 Brazil), not 04:00 UTC (01:00 Brazil). TCG still spawns at 04 |
 | Game still owns spawn | Ignore the ping and join after `slotUnix + 600` → no Collector (TCG) |
-| In-server players | Still get TCG toast at T−2 min; at most one Open Cloud MOMENT that UTC day |
+| In-server players | Still get TCG toast at T−2 min; at most one Open Cloud MOMENT that UTC week |
 | Live snapshot | One `data-stores:snapshot` POST per UTC day when `ROBLOX_API_KEY_LIVE_SNAPSHOT` is set; skip Collector send windows; ledger unique `(universe, utc_date)` |
 
 ## Constraints from Roblox (do not weaken)
@@ -72,7 +72,7 @@ Documented on Creator Hub / experience-notifications guide; verify if they chang
 
 - Recipient **13+** and **opted in** (experience Notify bell). Under-13 Notify-bell users get experience **updates** only, not MOMENT.
 - Delivered to **Notification Center** (silent inbox). Mobile/desktop push only if the user enabled those channels.
-- **One experience notification per user per UTC day** from a given experience (treat as UTC calendar day of send; confirmed 2026-09-10).
+- **One experience notification per user per UTC day** from a given experience (treat as UTC calendar day of send; confirmed 2026-09-10). This controller sends less often: **one MOMENT per user per UTC ISO week**.
 - Experience eligibility: **≥100 visits**, not under moderation, you can manage the experience.
 - `payload.type` must be `"MOMENT"` (only supported type).
 - Notification **string** is created in Creator Dashboard; there is no Open Cloud API to create copy.
@@ -105,13 +105,13 @@ Rollback is “Ctrl-C / set `DRY_RUN=true`.” TCG spawn is unaffected. The lapt
 | Item | Number |
 | --- | --- |
 | Live visit slots | 2 / UTC day (16 and 04) — TCG spawn |
-| Live notify slots | **1 / UTC day** (`notifyHoursLocal: [16]`) |
+| Live notify slots | **1 / UTC day** on the clock (`notifyHoursLocal: [16]`), at most one send per user per ISO week |
 | Sandbox visit slots | 4 / UTC day |
-| Sandbox notify slots | up to 4; Roblox 1/day cap still applies — arm one hour per test user |
+| Sandbox notify slots | up to 4 on the clock; the first successful one of the ISO week consumes the cap |
 | Send window | 60 seconds once per slot |
 | Audience | tens of userIds |
-| HTTP | 1 POST per user per sent slot, sequential; plus 1 Live snapshot POST per UTC day |
-| Ledger | O(users × **notify** slots) — ~10 users × 1 Live notify/day × 365 ≈ **3.65k** Live send rows/year. Snapshots: 1 Live row/UTC day |
+| HTTP | 1 POST per user per sent week, sequential; plus 1 Live snapshot POST per UTC day |
+| Ledger | O(users × weeks) — ~10 users × 1 Live MOMENT/week × 52 ≈ **520** Live send rows/year. Snapshots: 1 Live row/UTC day |
 
 ## Out of scope
 

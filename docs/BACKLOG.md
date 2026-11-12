@@ -17,7 +17,7 @@ IDs in this repo: `OC-*`. TCG follow-ups (other repo): `TCG-OC-*`. Game P1 + TCG
 | OC-02 | P0 | Host-TZ independence | Same `slotUnix` under `TZ=UTC`, `TZ=America/Los_Angeles`, `TZ=Europe/Lisbon`. DST dates `2026-03-08`, `2026-11-01`, `2026-03-29`, `2026-10-25` frozen. |
 | OC-03 | P0 | No studio keys | `studio:<index>` never enters the send path. |
 | OC-04 | P0 | SQLite ledger | `INSERT OR IGNORE` then `SELECT`. Unique conflict is not “already sent.” Pending + in window → POST again. Pending + window closed → no HTTP. 2xx → `UPDATE … WHERE status='pending'`. 400/403/404 → failed only if still pending (**2xx then 4xx must not overwrite `sent`**). 429/5xx/crash → leave pending; **no in-tick backoff**. **One `await tick()` at a time**; two overlapping ticks → one HTTP. No `tick_log` / no `sending` status. |
-| OC-05 | P0 | One MOMENT / UTC day | `moment_days` skip even if a later slot’s window opens. Day is **UTC** (confirmed 2026-09-10). After a 04:00 send, 16:00 skipped. |
+| OC-05 | P0 | One MOMENT / UTC week | `moment_days` skips later notify windows in the same **ISO week** (Monday–Sunday UTC). A send on Thursday skips Friday; the next Monday can send. Roblox still allows one per UTC day. |
 | OC-05b | P0 | Notify hours ≠ visit hours | `notifyHoursLocal` ⊆ `hoursLocal` in the **same** IANA zone; filter on the hour used to **build** the slot. Live `Etc/UTC` `[16]`. Brazil: `[13, 1]` + notify `[13]` → send only 16:00Z. 04:00 is computed but not sent. Sandbox: subset or arm one hour per test day. |
 | OC-06 | P1 | Config + secrets | `config/schedule.json` committed (`hoursLocal` + `notifyHoursLocal`). `.env.example` placeholders. Keys never in git **or GitHub Actions**. `.gitignore` in PR-1. **Done.** |
 | OC-07 | P1 | Allowlist audience | `config/allowlist.sandbox.json` / `allowlist.live.json`. Fallback when `CollectorNotify` is missing. Empty list ⇒ no HTTP unless a datastore cache exists. **Done.** |
@@ -75,7 +75,7 @@ Per-user MOMENT, same Open Cloud API as v1. **Not** Experience Updates, **not** 
 | Scale | Sequential POSTs. Shared 16:00 with Sandbox. Budget ~400 users / 60s at ~100ms each; time-budget sandbox or split processes if Live would miss the window. |
 | Logs | `audienceN`, `storeListedN`, `recencyDroppedN`, `source=datastore\|allowlist`. |
 
-Released owners stay eligible for **14 days after release** (TCG touches `updatedUnix` on release). Current offline owners are included. In-server owners still get TCG toast at T−2; at most one MOMENT that UTC day.
+Released owners stay eligible for **14 days after release** (TCG touches `updatedUnix` on release). Current offline owners are included. In-server owners still get TCG toast at T−2; at most one MOMENT that UTC week.
 
 ---
 

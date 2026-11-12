@@ -104,11 +104,23 @@ export class Ledger {
   }
 
   hasMomentToday(universeId: string, userId: number, utcDate: string): boolean {
+    return this.hasMomentBetween(universeId, userId, utcDate, utcDate);
+  }
+
+  /** Inclusive UTC dates `YYYY-MM-DD`. Used for the one-MOMENT-per-ISO-week cap. */
+  hasMomentBetween(
+    universeId: string,
+    userId: number,
+    startDate: string,
+    endDate: string,
+  ): boolean {
     const row = this.db
       .prepare(
-        "SELECT 1 AS ok FROM moment_days WHERE universe_id = ? AND user_id = ? AND utc_date = ?",
+        `SELECT 1 AS ok FROM moment_days
+          WHERE universe_id = ? AND user_id = ? AND utc_date >= ? AND utc_date <= ?
+          LIMIT 1`,
       )
-      .get(universeId, userId, utcDate) as { ok: number } | undefined;
+      .get(universeId, userId, startDate, endDate) as { ok: number } | undefined;
     return Boolean(row);
   }
 

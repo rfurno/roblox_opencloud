@@ -8,6 +8,7 @@ import {
   inSendWindow,
   isNotifyHour,
   jitterFor,
+  utcIsoWeekFromUnix,
 } from "../src/clock.ts";
 
 const GOLDEN = {
@@ -74,6 +75,25 @@ describe("clockSlotsNear Etc/UTC", () => {
     const slot = slots.find((s) => s.key === GOLDEN.key)!;
     expect(slot.unix).toBe(GOLDEN.slotUnix);
     expect(formatSlotKey(2026, 9, 10, 16)).toBe(GOLDEN.key);
+  });
+});
+
+describe("utcIsoWeekFromUnix", () => {
+  it("uses Monday–Sunday UTC, including the year boundary", () => {
+    const thursday = DateTime.fromISO("2026-09-10T16:00:00", { zone: "utc" }).toUnixInteger();
+    expect(utcIsoWeekFromUnix(thursday)).toEqual({
+      weekKey: "2026-W37",
+      startDate: "2026-09-07",
+      endDate: "2026-09-13",
+    });
+    const nextMonday = DateTime.fromISO("2026-09-14T00:00:00", { zone: "utc" }).toUnixInteger();
+    expect(utcIsoWeekFromUnix(nextMonday).weekKey).toBe("2026-W38");
+    const newYear = DateTime.fromISO("2026-01-01T12:00:00", { zone: "utc" }).toUnixInteger();
+    expect(utcIsoWeekFromUnix(newYear)).toEqual({
+      weekKey: "2026-W01",
+      startDate: "2025-12-29",
+      endDate: "2026-01-04",
+    });
   });
 });
 

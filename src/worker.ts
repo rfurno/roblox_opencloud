@@ -4,6 +4,7 @@ import {
   inSendWindow,
   isNotifyHour,
   utcDateFromUnix,
+  utcIsoWeekFromUnix,
   type Slot,
 } from "./clock.ts";
 import { apiKeyConfigured, jobOf, messageIdConfigured, type AppConfig, type UniverseName } from "./config.ts";
@@ -170,6 +171,7 @@ async function sendSlot(
   }
   const send = opts.send ?? sendMoment;
   const utcDate = utcDateFromUnix(nowUnix);
+  const week = utcIsoWeekFromUnix(nowUnix);
   let sentN = 0;
   let failN = 0;
   let skipN = 0;
@@ -179,7 +181,7 @@ async function sendSlot(
       skipN += 1;
       continue;
     }
-    if (ledger.hasMomentToday(job.universeId, userId, utcDate)) {
+    if (ledger.hasMomentBetween(job.universeId, userId, week.startDate, week.endDate)) {
       skipN += 1;
       continue;
     }
@@ -312,6 +314,7 @@ async function sendSandboxNowInner(
   const job = jobOf(cfg.schedule, name);
   const nowUnix = opts.nowUnix ?? Math.floor(Date.now() / 1000);
   const utcDate = utcDateFromUnix(nowUnix);
+  const week = utcIsoWeekFromUnix(nowUnix);
   const slotKey = manualSlotKey(utcDate);
   const empty: ManualSendResult = {
     ok: false,
@@ -346,13 +349,13 @@ async function sendSandboxNowInner(
   let skipN = 0;
 
   for (const userId of allowlist) {
-    if (ledger.hasMomentToday(job.universeId, userId, utcDate)) {
+    if (ledger.hasMomentBetween(job.universeId, userId, week.startDate, week.endDate)) {
       skipN += 1;
       results.push({
         userId,
         httpStatus: null,
         outcome: "skipped",
-        error: "already sent this UTC day",
+        error: `already sent this UTC week (${week.weekKey})`,
       });
       continue;
     }

@@ -36,7 +36,7 @@ Secrets stay in `.env` (gitignored). MOMENT dry-run does not need notification k
 | --- | --- |
 | Recompute TCG Collector `slotKey` / `slotUnix` | Spawn NPCs or write TCG ProfileStore |
 | POST Open Cloud MOMENT at `slotUnix − 600s` (10 min) for **notify hours** | Send in-game `COLLECTOR_INCOMING` toasts |
-| Allowlist, or 14-day lot alumni via `CollectorNotify` (OC-15); Live notify hour **16** only | Blast all Live CCU / Notify-bell; spend the 1/day cap on 04:00 UTC |
+| Allowlist, or 14-day lot alumni via `CollectorNotify` (OC-15); Live notify hour **16** only; one MOMENT per user per UTC week | Blast all Live CCU / Notify-bell; spend the weekly MOMENT on 04:00 UTC |
 | Persist an idempotent send ledger under `./data` | Use MessagingService as offline notify |
 | POST one Live DataStore snapshot per UTC day | Download a dump, list Roblox snapshots, or restore keys |
 | Run when CCU is 0, if this process is up | Notify Studio Play `studio:<index>` slots |
