@@ -24,7 +24,8 @@ If controller and game disagree on `slotUnix`, **fix the controller**.
 | Live `notifyHoursLocal` (send) | `[16]` under `Etc/UTC` (⊆ `hoursLocal`, same zone). Brazil: `[13]` with `hoursLocal: [13, 1]` |
 | Sandbox universe / place | `7034342160` / `117194948580255` |
 | Sandbox `hoursLocal` (visit / clock) | `[4, 10, 16, 22]` |
-| Sandbox `notifyHoursLocal` | `[4, 10, 16, 22]` — subset or arm one hour per test day |
+| Sandbox `notifyHoursLocal` | `[4, 10, 16, 22]`. First successful notify window of the UTC ISO week sends; later windows that week skip |
+| MOMENT cap | One successful send per user per universe per **UTC ISO week** (Monday 00:00 through Sunday). `moment_days.utc_date` is the send date; skip when any row for that user falls in the week. Roblox still allows one per UTC day |
 | `jitterSeconds` | `600` |
 | `pushLeadSeconds` | `600` |
 | `sendWindowSeconds` | `60` |

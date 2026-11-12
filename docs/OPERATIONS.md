@@ -19,7 +19,7 @@ Dashboard: `http://127.0.0.1:3848`. Bind is loopback. **One `npm start`.** A sec
 
 | Job | Universe | Place | Visit hours UTC | Notify hours (send) | Notify key | Snapshot key | Message id env | Allowlist | Sqlite |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| sandbox | `7034342160` | `117194948580255` | 4, 10, 16, 22 | same, or subset for a test day | `ROBLOX_API_KEY_SANDBOX` | `ROBLOX_API_KEY_SANDBOX_SNAPSHOT` (optional) | `MESSAGE_ID_SANDBOX` | `config/allowlist.sandbox.json` | `./data/sandbox.sqlite` |
+| sandbox | `7034342160` | `117194948580255` | 4, 10, 16, 22 | same; first success of the UTC week sends | `ROBLOX_API_KEY_SANDBOX` | `ROBLOX_API_KEY_SANDBOX_SNAPSHOT` (optional) | `MESSAGE_ID_SANDBOX` | `config/allowlist.sandbox.json` | `./data/sandbox.sqlite` |
 | live | `6674250544` | `98219898516303` | 16, 4 | **16 only** | `ROBLOX_API_KEY_LIVE` | `ROBLOX_API_KEY_LIVE_SNAPSHOT` | `MESSAGE_ID_LIVE` | `config/allowlist.live.json` | `./data/live.sqlite` |
 
 Never paste a Live key into a Sandbox curl, or the reverse. Never put the snapshot key in `ROBLOX_API_KEY_LIVE` (wrong scope).
@@ -345,7 +345,7 @@ PR-5 only **commits** team userIds. Flipping `DRY_RUN=false` is this ops step, n
 | Dashboard “Will notify 0” with rows in Creator Hub | List `id` not parsed / recency drop | Open Cloud id is `global/<userId>`. Confirm tick `source=datastore` `storeListedN` / `recencyDroppedN` |
 | `audienceN: 0` + `no slot in send window` | Normal most of the day | Not a failed list. Watch `audience refreshed` logs and the Collector card count |
 
-Missed window ⇒ **skip**. There is no catch-up send. Next chance is the next **notify** slot (and only if that user has not already used the UTC-day cap).
+Missed window ⇒ **skip**. There is no late send after those 60 seconds. Next chance is the next **notify** slot in the same UTC ISO week if that user has no `moment_days` row yet; otherwise the following week.
 
 ---
 

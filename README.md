@@ -46,14 +46,14 @@ Secrets stay in `.env` (gitignored). MOMENT dry-run does not need notification k
 | Environment | Universe ID | Place ID | Visit hours UTC | Notify hours |
 | --- | --- | --- | --- | --- |
 | Live | `6674250544` | `98219898516303` | 16, 4 | **16 only** |
-| Sandbox | `7034342160` | `117194948580255` | 4, 10, 16, 22 | all, or subset for a test day |
+| Sandbox | `7034342160` | `117194948580255` | 4, 10, 16, 22 | all; first success of the UTC week sends |
 | Studio Play | n/a | n/a | Do not send | Do not send |
 
 ## Timing
 
 | Event | When |
 | --- | --- |
-| Open Cloud MOMENT | `slotUnix − 600s` (10 min), window 60s, notify hours only |
+| Open Cloud MOMENT | `slotUnix − 600s` (10 min), window 60s, notify hours only, at most one per user per UTC ISO week (Monday–Sunday) |
 | Live DataStore snapshot | First 30s tick of the UTC day with a snapshot key set; skips Collector send windows; 1/UTC day |
 | In-game toast | `slotUnix − 120s` — **game only** |
 | Collector spawn | `slotUnix` — **game only** |

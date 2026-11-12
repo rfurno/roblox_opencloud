@@ -7,7 +7,7 @@
 | Place | Role | Universe ID | Place ID | Visit hours UTC | Notify hours |
 | --- | --- | --- | --- | --- | --- |
 | [Gachamon TCG](https://www.roblox.com/games/98219898516303/Gachamon-TCG) | Live BETA | `6674250544` | `98219898516303` | 16, 4 | **16 only** |
-| Gachamon Sandbox | Private development | `7034342160` | `117194948580255` | 4, 10, 16, 22 | all, or one hour per test day |
+| Gachamon Sandbox | Private development | `7034342160` | `117194948580255` | 4, 10, 16, 22 | all; first success of the UTC week sends |
 
 Live and Sandbox are **different universes**. Sandbox sends must never use the Live universe id (and vice versa).
 
@@ -15,7 +15,7 @@ Live and Sandbox are **different universes**. Sandbox sends must never use the L
 
 ## Pitch
 
-The Collector visits shops on a **wall clock**, not “N minutes after you join.” If you are in a server 2 minutes before arrival, TCG already toasts you. If you are offline, you miss the visit and there is **no catch-up**. This service pings opted-in **lot alumni** (anyone who has ever claimed a lot, current or former, active in the last 14 days) so they can join in time. Send is ~**10 minutes** before `slotUnix`.
+The Collector visits shops on a **wall clock**, not “N minutes after you join.” If you are in a server 2 minutes before arrival, TCG already toasts you. If you are offline, you miss the visit and there is **no catch-up**. This service pings opted-in **lot alumni** (anyone who has ever claimed a lot, current or former, active in the last 14 days) so they can join in time. Send is ~**10 minutes** before `slotUnix`. Each user gets that ping at most **once per UTC ISO week** (Monday–Sunday). Later Collector visits that week do not send again.
 
 It is a Roblox **experience notification** (`MOMENT`) via Open Cloud — not SMS, email, or Discord. Creators cannot use those channels.
 
@@ -31,7 +31,7 @@ The same process also takes **one Live DataStore snapshot per UTC day**. That is
 
 ## Job to be done
 
-**When** The Collector’s next UTC slot is 10 minutes away, **I want** a Notification Center item that deep-links into Gachamon, **so I can** be in my shop for the 10-minute catch window.
+**When** The Collector’s first notify slot of the UTC week is 10 minutes away, **I want** a Notification Center item that deep-links into Gachamon, **so I can** be in my shop for the 10-minute catch window.
 
 Joining after the catch window still gets **no spawn**. That is game-owned (`SpecialNpcDirector.tickPlayer`) and correct. The notification is a reminder, not a spawn trigger.
 
@@ -93,7 +93,7 @@ DataStore snapshots (separate key; do not weaken):
 | 0 Clock | none | no — golden tests (`npm test`) |
 | 1 Local dry-run | this laptop: `npm start` + `http://127.0.0.1:3848` | no |
 | 2 Sandbox curl | one team user, manual curl | yes, off-clock acceptable once |
-| 3 Local Sandbox send | `config/allowlist.sandbox.json`. Gates: dashboard string + Sandbox key + ≥100 visits + opted-in user + `DRY_RUN=false` **armed only for that UTC day/hour** + laptop awake + clock golden 433 | yes |
+| 3 Local Sandbox send | `config/allowlist.sandbox.json`. Gates: dashboard string + Sandbox key + ≥100 visits + opted-in user + `DRY_RUN=false` **armed only for that UTC week’s target hour** + laptop awake + clock golden 433 | yes |
 | 4 Gated Live (local) | tiny `allowlist.live.json` + `LIVE_SENDS_ENABLED=true` | yes, not CCU |
 | 5 Fly always-on | same jobs, machine not a laptop | later |
 | 6 DataStore audience | TCG `CollectorNotify` lot alumni, 14-day recency, re-add on join | **yes — OC-15 done.** Keys set. Dashboard shows notify N / EverOwnedLot. First Live HTTP: 16:00 UTC window. |

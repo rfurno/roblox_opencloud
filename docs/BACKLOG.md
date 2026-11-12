@@ -1,6 +1,6 @@
 # Gachamon OpenCloud Controller — Backlog
 
-**Status (2026-09-15):** Local scheduler running. Send lead **10 min** (OC-19). Daily Live snapshot (OC-18). Lot-alumni audience (OC-15) lists `CollectorNotify` every 15 min; dashboard **Will notify N · EverOwnedLot M**. Next proof: a `source=datastore` MOMENT (Sandbox tonight only if that user has no `moment_days` row today; Live **~15:47 UTC** tomorrow). Spec: `roblox_gacha/docs/COLLECTOR_OPEN_CLOUD_NOTIFICATIONS.md`.
+**Status (2026-09-15):** Local scheduler running. Send lead **10 min** (OC-19). Daily Live snapshot (OC-18). Lot-alumni audience (OC-15) lists `CollectorNotify` every 15 min; dashboard **Will notify N · EverOwnedLot M**. Next proof: a `source=datastore` MOMENT (only if that user has no `moment_days` row this UTC ISO week; Live **16:00 UTC**). Spec: `roblox_gacha/docs/COLLECTOR_OPEN_CLOUD_NOTIFICATIONS.md`.
 
 Priority: **P0** clock/safety, **P1** Sandbox send, **P2** Live / audience / polish.
 
@@ -18,7 +18,7 @@ IDs in this repo: `OC-*`. TCG follow-ups (other repo): `TCG-OC-*`. Game P1 + TCG
 | OC-03 | P0 | No studio keys | `studio:<index>` never enters the send path. |
 | OC-04 | P0 | SQLite ledger | `INSERT OR IGNORE` then `SELECT`. Unique conflict is not “already sent.” Pending + in window → POST again. Pending + window closed → no HTTP. 2xx → `UPDATE … WHERE status='pending'`. 400/403/404 → failed only if still pending (**2xx then 4xx must not overwrite `sent`**). 429/5xx/crash → leave pending; **no in-tick backoff**. **One `await tick()` at a time**; two overlapping ticks → one HTTP. No `tick_log` / no `sending` status. |
 | OC-05 | P0 | One MOMENT / UTC week | `moment_days` skips later notify windows in the same **ISO week** (Monday–Sunday UTC). A send on Thursday skips Friday; the next Monday can send. Roblox still allows one per UTC day. |
-| OC-05b | P0 | Notify hours ≠ visit hours | `notifyHoursLocal` ⊆ `hoursLocal` in the **same** IANA zone; filter on the hour used to **build** the slot. Live `Etc/UTC` `[16]`. Brazil: `[13, 1]` + notify `[13]` → send only 16:00Z. 04:00 is computed but not sent. Sandbox: subset or arm one hour per test day. |
+| OC-05b | P0 | Notify hours ≠ visit hours | `notifyHoursLocal` ⊆ `hoursLocal` in the **same** IANA zone; filter on the hour used to **build** the slot. Live `Etc/UTC` `[16]`. Brazil: `[13, 1]` + notify `[13]` → send only 16:00Z. 04:00 is computed but not sent. Sandbox lists every visit hour; the weekly cap still sends only the first success. |
 | OC-06 | P1 | Config + secrets | `config/schedule.json` committed (`hoursLocal` + `notifyHoursLocal`). `.env.example` placeholders. Keys never in git **or GitHub Actions**. `.gitignore` in PR-1. **Done.** |
 | OC-07 | P1 | Allowlist audience | `config/allowlist.sandbox.json` / `allowlist.live.json`. Fallback when `CollectorNotify` is missing. Empty list ⇒ no HTTP unless a datastore cache exists. **Done.** |
 | OC-08 | P1 | Live gate | `LIVE_SENDS_ENABLED=false` default. Live job no-ops HTTP unless flag true **and** Live allowlist non-empty. |

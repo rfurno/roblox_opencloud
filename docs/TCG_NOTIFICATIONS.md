@@ -27,7 +27,7 @@ Places:
 | Env | Universe | Place | Visit hours UTC | Notify hours (controller) |
 | --- | --- | --- | --- | --- |
 | Live | `6674250544` | `98219898516303` | 16, 4 | **16 only** |
-| Sandbox | `7034342160` | `117194948580255` | 4, 10, 16, 22 | all, or one hour per test day |
+| Sandbox | `7034342160` | `117194948580255` | 4, 10, 16, 22 | all; first success of the UTC week sends |
 | Studio Play | n/a | n/a | Do not write `CollectorNotify`. Do not send MOMENT. | |
 
 ---
